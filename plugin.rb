@@ -1,36 +1,33 @@
 # frozen_string_literal: true
 
-# name: discourse-streamers-plugin
+# name: Discourse-Streamers-Plugin
 # about: Integrate Icecast audio streams with Discourse users (HeartbeatPleasure)
 # version: 0.1.0
 # authors: Chris
-
-enabled_site_setting :streamers_icecast_status_url
+# url: https://github.com/heartbeatpleasure/Discourse-Streamers-Plugin
 
 module ::Streamers
-  PLUGIN_NAME = "discourse-streamers-plugin"
+  # Gebruik dezelfde naam als hierboven, zodat requires_plugin klopt
+  PLUGIN_NAME = "Discourse-Streamers-Plugin"
 end
 
 require_relative "lib/streamers/engine"
 
 after_initialize do
-  # Mount de plugin-routes
+  #
+  # Routes toevoegen
+  #
   Discourse::Application.routes.append do
-    # Top-level alias voor de streams JSON/HTML endpoint
+    # Alias: /streams → live streams JSON (en later HTML via frontend)
     get "/streams" => "streamers/streams#index"
 
-    # Icecast URL-auth endpoint en /streamers/* routes via engine
+    # Mount de engine voor /streamers/*
     mount ::Streamers::Engine, at: "/streamers"
   end
 
-  # Controleer of de groep bestaat (alleen een waarschuwing loggen)
-  if SiteSetting.streamers_group_name.present?
-    group = Group.find_by(name: SiteSetting.streamers_group_name)
-    if group.nil?
-      Rails.logger.warn(
-        "[streamers] No group found with name '#{SiteSetting.streamers_group_name}'. " \
-        "Streaming features will be effectively disabled until this is corrected."
-      )
-    end
-  end
+  #
+  # BELANGRIJK:
+  # Geen directe calls naar SiteSetting.* hier, zodat bootstrap niet faalt
+  # als settings nog niet zijn geregistreerd.
+  #
 end
