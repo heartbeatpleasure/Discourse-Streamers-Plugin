@@ -15,14 +15,8 @@ enabled_site_setting :streamers_enabled
 require_relative "lib/streamers/engine"
 
 after_initialize do
-  #
-  # Globale routes
-  #
   Discourse::Application.routes.append do
-    # JSON/HTML endpoint voor de lijst met streams
     get "/streams" => "streamers/streams#index"
-
-    # Engine mount voor eventuele extra routes (/streamers/...)
     mount ::Streamers::Engine, at: "/streamers"
   end
 end
