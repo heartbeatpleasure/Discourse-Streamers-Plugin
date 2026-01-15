@@ -1,74 +1,74 @@
 plugins:
+  # Master switch: plugin aan/uit
   streamers_enabled:
-    default: true
-    client: false
-    type: bool
     plugin: discourse-streamers-plugin
-    description: "Enable or disable the Streamers plugin features."
-
-  streamers_group_name:
-    default: "Streamers"
-    client: false
-    plugin: discourse-streamers-plugin
-    description: "Name of the Discourse group whose members are allowed to stream."
-
-  streamers_min_trust_level:
-    default: 2
-    client: false
-    type: integer
-    plugin: discourse-streamers-plugin
-    description: "Minimum trust level for automatic membership in the Streamers group (when enabled)."
-
-  streamers_auto_manage_group:
-    default: false
-    client: false
-    type: bool
-    plugin: discourse-streamers-plugin
-    description: "Automatically manage Streamers group membership based on trust level and exclusions."
-
-  streamers_icecast_status_url:
-    default: ""
-    client: false
-    plugin: discourse-streamers-plugin
-    description: "Full URL to Icecast JSON status endpoint (e.g. https://stream.heartbeatpleasure.com/radio/status-json.xsl)."
-
-  streamers_icecast_basic_auth_user:
-    default: ""
-    client: false
-    plugin: discourse-streamers-plugin
-    description: "Basic Auth username for the Icecast status endpoint via Nginx."
-
-  streamers_icecast_basic_auth_password:
-    default: ""
-    client: false
-    secret: true
-    plugin: discourse-streamers-plugin
-    description: "Basic Auth password for the Icecast status endpoint via Nginx."
-
-  streamers_streams_page_requires_login:
     default: false
     client: true
-    type: bool
-    plugin: discourse-streamers-plugin
-    description: "Require users to be logged in to access the /streams page."
 
-  streamers_chat_topic_id:
-    default: 0
-    client: false
+  # Naam van de groep die mag streamen (bijv. "Streamers")
+  streamers_group_name:
+    plugin: discourse-streamers-plugin
+    default: "Streamers"
+    client: true
+
+  # Minimum trust level voor auto-membership (0..4)
+  streamers_min_trust_level:
+    plugin: discourse-streamers-plugin
+    default: 2
     type: integer
-    plugin: discourse-streamers-plugin
-    description: "Topic ID of the shared 'Streamers' chat/discussion topic. 0 = disabled / no chat link."
-
-  streamers_icecast_source_auth_enabled:
-    default: false
+    min: 0
+    max: 4
     client: false
-    type: bool
-    plugin: discourse-streamers-plugin
-    description: "Enable Icecast source URL-auth endpoint for per-user stream keys."
 
-  streamers_icecast_source_auth_shared_secret:
+  # Groep automatisch managen op basis van TL + force_exclude
+  streamers_auto_manage_group:
+    plugin: discourse-streamers-plugin
+    default: true
+    client: false
+
+  # Icecast status endpoint via Nginx proxy
+  # Bijvoorbeeld: https://stream.heartbeatpleasure.com/radio/status-json.xsl
+  streamers_icecast_status_url:
+    plugin: discourse-streamers-plugin
+    default: ""
+    type: text
+    client: false
+
+  # Basic Auth naar Nginx /radio/… (die we eerder hebben ingericht)
+  streamers_icecast_basic_auth_user:
+    plugin: discourse-streamers-plugin
     default: ""
     client: false
-    secret: true
+
+  streamers_icecast_basic_auth_password:
     plugin: discourse-streamers-plugin
-    description: "Optional shared secret for validating Icecast auth requests (can be left blank for now)."
+    default: ""
+    secret: true
+    client: false
+
+  # /streams pagina alleen beschikbaar voor ingelogde users?
+  streamers_streams_page_requires_login:
+    plugin: discourse-streamers-plugin
+    default: true
+    client: true
+
+  # Topic ID van de gezamenlijke “Streamers” chat / discussietopic
+  # 0 = uitgeschakeld
+  streamers_chat_topic_id:
+    plugin: discourse-streamers-plugin
+    default: 0
+    type: integer
+    client: false
+
+  # Per-user stream keys via Icecast source auth endpoint
+  streamers_icecast_source_auth_enabled:
+    plugin: discourse-streamers-plugin
+    default: false
+    client: false
+
+  # Optionele shared secret waarmee Icecast auth-calls worden gevalideerd
+  streamers_icecast_source_auth_shared_secret:
+    plugin: discourse-streamers-plugin
+    default: ""
+    secret: true
+    client: false
