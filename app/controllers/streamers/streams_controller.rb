@@ -4,26 +4,30 @@ module Streamers
   class StreamsController < ::ApplicationController
     requires_plugin ::Streamers::PLUGIN_NAME
 
-    before_action :ensure_can_view_streams
+    before_action :ensure_enabled!
+    before_action :ensure_configured!
 
     def index
-      payload = Streamers::LiveStatus.current
+      status = Streamers::LiveStatus.current
 
-      respond_to do |format|
-        format.json { render json: payload }
-        format.html do
-          # Voor nu: eenvoudige JSON-dump. Frontend (Ember) kan later een mooie UI maken.
-          render json: payload
-        end
-      end
+      render_json_dump(
+        live_streams: status[:streams],
+        updated_at: status[:updated_at]
+      )
+    rescue => e
+      Rails.logger.error("[streamers] /streams failed: #{e.class}: #{e.message}")
+      raise Discourse::NotFound
     end
 
     private
 
-    def ensure_can_view_streams
-      if SiteSetting.streamers_streams_page_requires_login && !current_user
-        raise Discourse::NotFound
-      end
+    def ensure_enabled!
+      raise Discourse::NotFound unless SiteSetting.streamers_enabled
+    end
+
+    def ensure_configured!
+      # Minimaal: een Icecast status URL moet zijn ingesteld
+      raise Discourse::NotFound if SiteSetting.streamers_icecast_status_url.blank?
     end
   end
 end

@@ -1,4 +1,11 @@
 plugins:
+  streamers_enabled:
+    default: true
+    client: false
+    type: bool
+    plugin: discourse-streamers-plugin
+    description: "Enable or disable the Streamers plugin features."
+
   streamers_group_name:
     default: "Streamers"
     client: false

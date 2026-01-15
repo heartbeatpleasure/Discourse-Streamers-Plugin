@@ -10,15 +10,19 @@ module ::Streamers
   PLUGIN_NAME = "discourse-streamers-plugin"
 end
 
+enabled_site_setting :streamers_enabled
+
 require_relative "lib/streamers/engine"
 
 after_initialize do
-  # Globale routes toevoegen
+  #
+  # Globale routes
+  #
   Discourse::Application.routes.append do
-    # Alias: /streams → Streamers::StreamsController#index
+    # JSON/HTML endpoint voor de lijst met streams
     get "/streams" => "streamers/streams#index"
 
-    # Engine mount voor /streamers/*
+    # Engine mount voor eventuele extra routes (/streamers/...)
     mount ::Streamers::Engine, at: "/streamers"
   end
 end
