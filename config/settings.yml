@@ -1,51 +1,70 @@
 plugins:
+  # Master switch: plugin aan/uit
   streamers_enabled:
     default: true
     client: true
+    type: bool
 
+  # Naam van de groep waarvan members mogen streamen (bijv. "Streamers")
   streamers_group_name:
     default: "Streamers"
-    client: true
+    client: false
+    type: string
 
+  # Minimum trust level voor automatische toevoeging aan de Streamers-groep
+  # (0..4, waarbij 2 = TL2)
   streamers_min_trust_level:
     default: 2
     type: integer
-    client: false
+    min: 0
+    max: 4
 
+  # Groep automatisch managen op basis van trust level + exclusions
   streamers_auto_manage_group:
-    default: false
+    default: true
     type: bool
-    client: false
 
+  # Icecast status endpoint via Nginx proxy
+  # Bijvoorbeeld: https://stream.heartbeatpleasure.com/radio/status-json.xsl
   streamers_icecast_status_url:
     default: ""
-    client: false
+    type: string
 
+  # Basic Auth naar Nginx /radio/… (die we eerder hebben ingericht)
   streamers_icecast_basic_auth_user:
     default: ""
-    client: false
+    type: string
 
   streamers_icecast_basic_auth_password:
     default: ""
+    type: string
     secret: true
-    client: false
 
+  # /streams pagina alleen beschikbaar voor ingelogde users?
   streamers_streams_page_requires_login:
     default: true
-    type: bool
     client: true
+    type: bool
 
+  # Topic ID van de gezamenlijke “Streamers” chat/discussietopic
+  # 0 = uitgeschakeld (geen chatlink)
   streamers_chat_topic_id:
     default: 0
     type: integer
-    client: false
 
+  # Per-user stream keys via Icecast source auth endpoint
   streamers_icecast_source_auth_enabled:
     default: false
     type: bool
-    client: false
 
+  # Optionele shared secret waarmee Icecast auth-calls worden gevalideerd
   streamers_icecast_source_auth_shared_secret:
     default: ""
+    type: string
     secret: true
-    client: false
+
+  # Lijst met usernames die nooit automatisch lid mogen worden van de
+  # Streamers-groep (ook niet als ze aan de trust level eisen voldoen).
+  streamers_force_exclude_from_streamers:
+    default: ""
+    type: list
