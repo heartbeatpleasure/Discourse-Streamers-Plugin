@@ -2,32 +2,33 @@
 
 module Streamers
   class StreamsController < ::ApplicationController
-    requires_plugin ::Streamers::PLUGIN_NAME
-
-    before_action :ensure_enabled!
-    before_action :ensure_configured!
+    before_action :enforce_login_requirement
 
     def index
-      status = Streamers::LiveStatus.current
+      status       = LiveStatus.new
+      live_streams = status.live_streams
 
-      render_json_dump(
-        live_streams: status[:streams],
-        updated_at: status[:updated_at]
-      )
-    rescue => e
-      Rails.logger.error("[streamers] /streams failed: #{e.class}: #{e.message}")
-      raise Discourse::NotFound
+      respond_to do |format|
+        format.json do
+          render json: {
+            live_streams: live_streams,
+            updated_at:   status.updated_at&.iso8601
+          }
+        end
+
+        format.html do
+          # frontend (theme component) pakt deze route en render zelf
+          render layout: "application"
+        end
+      end
     end
 
     private
 
-    def ensure_enabled!
-      raise Discourse::NotFound unless SiteSetting.streamers_enabled
-    end
-
-    def ensure_configured!
-      # Minimaal: een Icecast status URL moet zijn ingesteld
-      raise Discourse::NotFound if SiteSetting.streamers_icecast_status_url.blank?
+    def enforce_login_requirement
+      if ::SiteSetting.streamers_streams_page_requires_login && !current_user
+        raise Discourse::InvalidAccess.new
+      end
     end
   end
 end
