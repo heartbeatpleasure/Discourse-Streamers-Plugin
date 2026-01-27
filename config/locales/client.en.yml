@@ -1,0 +1,49 @@
+en:
+  js:
+    streamers:
+      title: "Live audio streams"
+      live: "Live"
+      no_streams: "No one is streaming right now."
+      error_loading: "There was a problem loading the live streams."
+      last_updated: "Last updated %{time}"
+      listen: "Listen"
+      profile: "Profile"
+      chat: "Open chat"
+      listeners:
+        one: "%{count} listener"
+        other: "%{count} listeners"
+
+    streamers_settings:
+      heading: "Streaming setup"
+      intro: "Use these details to configure your broadcasting software for streaming."
+      status_enabled: "Streaming is enabled for your account."
+      status_disabled: "Streaming is currently disabled for your account."
+      not_allowed: "You are not allowed to stream."
+      load_error: "We could not load your streaming settings."
+      mount_label: "Mount (path on the streaming server)"
+      listen_url_label: "Public listen URL"
+      copy: "Copy"
+      copied: "Copied!"
+      stream_key_label: "Stream key (password)"
+      stream_key_generate: "Generate stream key"
+      stream_key_never: "You have not generated a stream key yet."
+      stream_key_exists: "You already have an active stream key. Generating a new one will immediately revoke the old key."
+      stream_key_notice: "This key is shown only once. Paste it into your broadcasting software and keep it secret."
+      rotate_key: "Generate new stream key"
+      rotate_key_error: "We could not rotate your stream key. Please try again in a few seconds."
+      last_stream_label: "Your last stream"
+      last_stream_never: "You have not streamed yet."
+      last_stream_at: "Your last stream at %{time}."
+      help_title: "How to connect"
+      help_text_html: >
+        In your broadcasting software (for example Mixxx), create a new connection with the following settings:
+        <ul>
+          <li><strong>Server</strong>: stream.heartbeatpleasure.com</li>
+          <li><strong>Port</strong>: 8001</li>
+          <li><strong>Mount / Stream name</strong>: use the mount shown above.</li>
+          <li><strong>Username</strong>: your username on this website.</li>
+          <li><strong>Password</strong>: your stream key.</li>
+        </ul>
+        <p>If you generate a new stream key later, remember to update the password in your broadcasting software.</p>
+        <p>Keep these details private. Anyone who has them can broadcast live as you.</p>
+      copy_error: "We could not copy this value to your clipboard. Please copy it manually."

@@ -1,0 +1,15 @@
+en:
+  site_settings:
+    streamers_group_name: "Name of the Discourse group whose members are allowed to stream."
+    streamers_min_trust_level: "Minimum trust level for automatic membership in the Streamers group."
+    streamers_auto_manage_group: "Automatically manage Streamers group membership based on trust level and exclusions."
+    streamers_icecast_status_url: "Full URL to Icecast JSON status endpoint (e.g. https://stream.heartbeatpleasure.com/radio/status-json.xsl)."
+    streamers_icecast_basic_auth_user: "Basic Auth username for the Icecast status endpoint via Nginx."
+    streamers_icecast_basic_auth_password: "Basic Auth password for the Icecast status endpoint via Nginx."
+    streamers_streams_page_requires_login: "Require users to be logged in to access the /streams page."
+    streamers_chat_topic_id: "Topic ID of the shared 'Streamers' chat/discussion topic. 0 = disabled."
+    streamers_icecast_source_auth_enabled: "Enable Icecast source URL-auth endpoint for per-user stream keys."
+
+  streamers:
+    streams_title: "Live Streams"
+    no_streams: "No one is streaming right now."

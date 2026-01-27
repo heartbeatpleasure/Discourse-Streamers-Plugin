@@ -1,0 +1,50 @@
+plugins:
+  streamers_enabled:
+    default: true
+    client: true
+    type: bool
+
+  streamers_group_name:
+    default: "Streamers"
+    client: false
+    type: string
+
+  streamers_min_trust_level:
+    default: 2
+    type: integer
+    min: 0
+    max: 4
+
+  streamers_auto_manage_group:
+    default: true
+    type: bool
+
+  streamers_icecast_status_url:
+    default: ""
+    type: string
+
+  streamers_icecast_basic_auth_user:
+    default: ""
+    type: string
+
+  streamers_icecast_basic_auth_password:
+    default: ""
+    type: string
+    secret: true
+
+  streamers_streams_page_requires_login:
+    default: true
+    client: true
+    type: bool
+
+  streamers_chat_topic_id:
+    default: 0
+    type: integer
+
+  streamers_icecast_source_auth_enabled:
+    default: false
+    type: bool
+
+  streamers_force_exclude_from_streamers:
+    default: ""
+    type: list
