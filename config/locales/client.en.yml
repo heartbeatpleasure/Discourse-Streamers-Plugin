@@ -47,3 +47,17 @@ en:
         <p>If you generate a new stream key later, remember to update the password in your broadcasting software.</p>
         <p>Keep these details private. Anyone who has them can broadcast live as you.</p>
       copy_error: "We could not copy this value to your clipboard. Please copy it manually."
+      
+    hb_streamers:
+      listen: "Listen"
+      pause: "Pause"
+      resume: "Resume"
+      play: "Play"
+      stop: "Stop"
+      mute: "Mute"
+      unmute: "Unmute"
+      open: "Open"
+      playing: "Playing"
+      paused: "Paused"
+      loading: "Loading…"
+      error: "Error"
