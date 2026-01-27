@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+require "uri"
 
 module Streamers
   class LiveStatus
@@ -47,6 +48,7 @@ module Streamers
           name: (user.name.presence || user.username),
           avatar_template: user.avatar_template,
           mount: mount,
+          listen_url: safe_listen_url(setting),
           listeners: src["listeners"].to_i,
           bitrate: src["bitrate"].to_i,
           title: safe_title,
@@ -85,6 +87,22 @@ module Streamers
       s = ::ActionController::Base.helpers.strip_tags(s)
       s = s.gsub(/[\u0000-\u001f\u007f]/, "")
       s.strip
+    end
+
+    # Bouwt de publieke luister-URL op via de bestaande plugin-logica:
+    # UserSetting#public_listen_url (afgeleid van streamers_icecast_status_url)
+    #
+    # We laten alleen http/https door om ellende te voorkomen.
+    def safe_listen_url(setting)
+      url = setting.public_listen_url.to_s
+      return "" if url.blank?
+
+      uri = URI.parse(url)
+      return "" unless uri.is_a?(URI::HTTP) || uri.is_a?(URI::HTTPS)
+
+      url
+    rescue URI::InvalidURIError
+      ""
     end
   end
 end
