@@ -48,3 +48,8 @@ plugins:
   streamers_force_exclude_from_streamers:
     default: ""
     type: list
+
+  streamers_stream_tag_options:
+    default: "ASMR|Heartbeats"
+    client: true
+    type: list

@@ -9,6 +9,7 @@ en:
     streamers_streams_page_requires_login: "Require users to be logged in to access the /streams page."
     streamers_chat_topic_id: "Topic ID of the shared 'Streamers' chat/discussion topic. 0 = disabled."
     streamers_icecast_source_auth_enabled: "Enable Icecast source URL-auth endpoint for per-user stream keys."
+    streamers_stream_tag_options: "List of available stream tags users can select on their streaming setup page (single select)."
 
   streamers:
     streams_title: "Live Streams"

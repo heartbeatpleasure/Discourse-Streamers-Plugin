@@ -42,6 +42,9 @@ module Streamers
         raw_title = src["title"].presence || src["server_name"]
         safe_title = sanitize_text(raw_title)
 
+        safe_tag = sanitize_text(setting.try(:stream_tag))
+        safe_tag = "" if safe_tag.length > 64
+
         {
           user_id: user.id,
           username: user.username,
@@ -52,6 +55,7 @@ module Streamers
           listeners: src["listeners"].to_i,
           bitrate: src["bitrate"].to_i,
           title: safe_title,
+          stream_tag: (safe_tag.presence),
           stream_started_at: (src["stream_start_iso8601"] || src["stream_start"])
         }
       end

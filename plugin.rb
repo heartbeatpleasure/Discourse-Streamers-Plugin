@@ -23,6 +23,9 @@ after_initialize do
     get  "/streamers/me.json"       => "streamers/user_settings#show", defaults: { format: :json }
     post "/streamers/me/rotate_key" => "streamers/user_settings#rotate_key", defaults: { format: :json }
 
+    # Update the user's selected stream tag (single select)
+    post "/streamers/me/stream_tag" => "streamers/user_settings#update_stream_tag", defaults: { format: :json }
+
     mount ::Streamers::Engine, at: "/streamers"
   end
 
