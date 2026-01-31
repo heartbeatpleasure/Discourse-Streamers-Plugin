@@ -53,3 +53,9 @@ plugins:
     default: "ASMR|Heartbeats"
     client: true
     type: list
+
+  streamers_live_status_cache_seconds:
+    default: 10
+    type: integer
+    min: 0
+    max: 300
