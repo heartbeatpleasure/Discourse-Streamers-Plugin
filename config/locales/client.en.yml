@@ -47,7 +47,15 @@ en:
         <p>If you generate a new stream key later, remember to update the password in your broadcasting software.</p>
         <p>Keep these details private. Anyone who has them can broadcast live as you.</p>
       copy_error: "We could not copy this value to your clipboard. Please copy it manually."
-      
+
+      # NEW: stream tag UI
+      stream_tag_label: "Stream tag"
+      stream_tag_none: "(none)"
+      stream_tag_help: "Choose what you're streaming. This will be shown on your live stream card."
+      stream_tag_saving: "Saving…"
+      stream_tag_saved: "Saved"
+      stream_tag_save_error: "We could not save your stream tag. Please try again."
+
     hb_streamers:
       listen: "Listen"
       pause: "Pause"
