@@ -22,16 +22,14 @@ module Streamers
       end
     end
 
-    # Lightweight endpoint for UI indicators (e.g. menu badge)
-    # Returns only whether anyone is live and how many streams are live.
+    # NEW: lightweight endpoint for menu indicator
+    # Returns only live boolean + count
     def status
-      payload = cached_streams_payload
-      streams = payload[:live_streams]
-      count = streams.is_a?(Array) ? streams.length : 0
+      payload = cached_status_payload
 
       render json: {
-        live: count.positive?,
-        count: count,
+        live: payload[:live],
+        count: payload[:count],
         updated_at: payload[:updated_at]
       }
     end
@@ -44,13 +42,27 @@ module Streamers
       end
     end
 
+    # Cached payload used by /streams.json
     def cached_streams_payload
-      ttl = ::SiteSetting.streamers_live_status_cache_seconds.to_i
+      ttl = ::SiteSetting.streamers_streams_cache_seconds.to_i
+      key = cache_key("streams_payload_v1")
 
       return compute_streams_payload if ttl <= 0
 
-      ::Rails.cache.fetch(cache_key, expires_in: ttl.seconds) do
+      ::Rails.cache.fetch(key, expires_in: ttl.seconds) do
         compute_streams_payload
+      end
+    end
+
+    # Cached payload used by /streams/status.json (smaller TTL by default)
+    def cached_status_payload
+      ttl = ::SiteSetting.streamers_streams_status_cache_seconds.to_i
+      key = cache_key("streams_status_payload_v1")
+
+      return compute_status_payload if ttl <= 0
+
+      ::Rails.cache.fetch(key, expires_in: ttl.seconds) do
+        compute_status_payload
       end
     end
 
@@ -64,17 +76,28 @@ module Streamers
       }
     end
 
-    # Cache key is site-specific (multi-site safe) and versioned.
-    # We intentionally keep it stable and rely on short TTL for freshness.
-    def cache_key
-      db = if defined?(::RailsMultisite::ConnectionManagement) &&
-              ::RailsMultisite::ConnectionManagement.respond_to?(:current_db)
-             ::RailsMultisite::ConnectionManagement.current_db
-           else
-             "default"
-           end
+    def compute_status_payload
+      streams_payload = compute_streams_payload
+      streams = streams_payload[:live_streams]
+      count = streams.is_a?(Array) ? streams.length : 0
 
-      "streamers:streams_payload:v1:#{db}"
+      {
+        live: count.positive?,
+        count: count,
+        updated_at: streams_payload[:updated_at]
+      }
+    end
+
+    def cache_key(suffix)
+      db =
+        if defined?(::RailsMultisite::ConnectionManagement) &&
+             ::RailsMultisite::ConnectionManagement.respond_to?(:current_db)
+          ::RailsMultisite::ConnectionManagement.current_db
+        else
+          "default"
+        end
+
+      "streamers:#{suffix}:#{db}"
     end
   end
 end

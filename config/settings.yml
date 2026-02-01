@@ -54,8 +54,16 @@ plugins:
     client: true
     type: list
 
-  streamers_live_status_cache_seconds:
+  # NEW: cache TTL for /streams.json payload
+  streamers_streams_cache_seconds:
     default: 10
+    type: integer
+    min: 0
+    max: 300
+
+  # NEW: cache TTL for /streams/status.json payload (menu indicator)
+  streamers_streams_status_cache_seconds:
+    default: 5
     type: integer
     min: 0
     max: 300

@@ -18,6 +18,8 @@ after_initialize do
   Discourse::Application.routes.append do
     get "/streams" => "streamers/streams#index"
     get "/streams.json" => "streamers/streams#index", defaults: { format: :json }
+
+    # NEW: lightweight status endpoint for menu indicator
     get "/streams/status.json" => "streamers/streams#status", defaults: { format: :json }
 
     get  "/streamers/me"            => "streamers/user_settings#show"

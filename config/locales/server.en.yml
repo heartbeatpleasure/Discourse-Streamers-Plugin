@@ -10,7 +10,8 @@ en:
     streamers_chat_topic_id: "Topic ID of the shared 'Streamers' chat/discussion topic. 0 = disabled."
     streamers_icecast_source_auth_enabled: "Enable Icecast source URL-auth endpoint for per-user stream keys."
     streamers_stream_tag_options: "List of available stream tags users can select on their streaming setup page (single select)."
-    streamers_live_status_cache_seconds: "Cache duration in seconds for live stream status (/streams.json and /streams/status.json) to reduce Icecast polling. 0 disables caching."
+    streamers_streams_cache_seconds: "Cache duration in seconds for /streams.json to reduce Icecast polling. 0 disables caching."
+    streamers_streams_status_cache_seconds: "Cache duration in seconds for /streams/status.json (menu indicator). 0 disables caching."
 
   streamers:
     streams_title: "Live Streams"
