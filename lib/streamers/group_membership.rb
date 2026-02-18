@@ -11,6 +11,23 @@ module ::Streamers
   module GroupMembership
     module_function
 
+    # Discourse events are not perfectly consistent across versions/plugins.
+    # Some callbacks pass a User instance, others pass an id. We accept both.
+    def resolve_user(user_or_id)
+      return user_or_id if user_or_id.is_a?(::User)
+
+      id =
+        if user_or_id.is_a?(Integer)
+          user_or_id
+        else
+          str = user_or_id.to_s
+          str.match?(/\A\d+\z/) ? str.to_i : nil
+        end
+
+      return nil if id.blank?
+      ::User.find_by(id: id)
+    end
+
     def normalized_group_name
       SiteSetting.streamers_group_name.to_s.strip.downcase
     end
@@ -18,7 +35,8 @@ module ::Streamers
     def streamers_group
       name = normalized_group_name
       return nil if name.blank?
-      Group.find_by(name: name)
+      # Be tolerant of case differences.
+      Group.where("LOWER(name) = ?", name).first
     end
 
     def streamers_group_match?(group)
@@ -69,6 +87,17 @@ module ::Streamers
       if eligible_for_auto_membership?(user)
         add_to_group(group, user)
       end
+    end
+
+    # Wrapper used by event hooks to guarantee we never break core flows
+    # (e.g. changing trust level in admin).
+    def ensure_membership_safely(user_or_id)
+      user = resolve_user(user_or_id)
+      return if user.blank?
+
+      ensure_membership!(user)
+    rescue StandardError => e
+      Rails.logger.warn("[streamers] ensure_membership_safely failed for #{user_or_id.inspect}: #{e.class} #{e.message}")
     end
 
     # Periodic sync to catch existing users and setting changes.

@@ -69,12 +69,12 @@ after_initialize do
   # --- Automatic group management (Step 1) ---
 
   DiscourseEvent.on(:user_promoted) do |user, *_|
-    ::Streamers::GroupMembership.ensure_membership!(user)
+    ::Streamers::GroupMembership.ensure_membership_safely(user)
   end
 
   # Some Discourse versions use a different event name for trust-level changes.
   DiscourseEvent.on(:user_trust_level_changed) do |user, *_|
-    ::Streamers::GroupMembership.ensure_membership!(user)
+    ::Streamers::GroupMembership.ensure_membership_safely(user)
   end
 
   # When settings change, enqueue a sync to cover existing users.
