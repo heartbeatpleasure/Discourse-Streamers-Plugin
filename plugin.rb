@@ -68,13 +68,26 @@ after_initialize do
 
   # --- Automatic group management (Step 1) ---
 
-  DiscourseEvent.on(:user_promoted) do |user, *_|
-    ::Streamers::GroupMembership.ensure_membership_safely(user)
+  # NOTE: Across Discourse versions, trust-level events differ in both name and arguments.
+  # We try to read the *new* trust level from the event args when available, because some
+  # callbacks fire before the user record reflects the updated trust_level.
+
+  DiscourseEvent.on(:user_promoted) do |user, *args|
+    # Common signatures:
+    # - (user, new_level)
+    # - (user, old_level, new_level)
+    new_level = args.last
+    new_level = nil unless new_level.is_a?(Integer)
+
+    ::Streamers::GroupMembership.ensure_membership_safely(user, trust_level_override: new_level)
   end
 
-  # Some Discourse versions use a different event name for trust-level changes.
-  DiscourseEvent.on(:user_trust_level_changed) do |user, *_|
-    ::Streamers::GroupMembership.ensure_membership_safely(user)
+  DiscourseEvent.on(:user_trust_level_changed) do |user, *args|
+    # Common signature: (user, old_level, new_level)
+    new_level = args.last
+    new_level = nil unless new_level.is_a?(Integer)
+
+    ::Streamers::GroupMembership.ensure_membership_safely(user, trust_level_override: new_level)
   end
 
   # When settings change, enqueue a sync to cover existing users.

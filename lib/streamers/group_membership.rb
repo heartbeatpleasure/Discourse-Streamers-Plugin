@@ -63,9 +63,17 @@ module ::Streamers
       excluded_usernames.include?(user.username.to_s.downcase)
     end
 
-    def eligible_for_auto_membership?(user)
+    def effective_trust_level(user, trust_level_override)
+      if trust_level_override.is_a?(Integer)
+        trust_level_override
+      else
+        user.trust_level.to_i
+      end
+    end
+
+    def eligible_for_auto_membership?(user, trust_level_override: nil)
       return false if user.blank?
-      user.trust_level.to_i >= min_trust_level && !user_excluded?(user)
+      effective_trust_level(user, trust_level_override) >= min_trust_level && !user_excluded?(user)
     end
 
     # Ensure membership for a single user.
@@ -73,7 +81,7 @@ module ::Streamers
     # If the user is excluded, we remove them from the group (if present).
     # If eligible, we add them to the group (if missing).
     # Otherwise, do nothing.
-    def ensure_membership!(user)
+    def ensure_membership!(user, trust_level_override: nil)
       return unless auto_manage?
 
       group = streamers_group
@@ -84,20 +92,22 @@ module ::Streamers
         return
       end
 
-      if eligible_for_auto_membership?(user)
+      if eligible_for_auto_membership?(user, trust_level_override: trust_level_override)
         add_to_group(group, user)
       end
     end
 
     # Wrapper used by event hooks to guarantee we never break core flows
     # (e.g. changing trust level in admin).
-    def ensure_membership_safely(user_or_id)
+    def ensure_membership_safely(user_or_id, trust_level_override: nil)
       user = resolve_user(user_or_id)
       return if user.blank?
 
-      ensure_membership!(user)
+      ensure_membership!(user, trust_level_override: trust_level_override)
     rescue StandardError => e
-      Rails.logger.warn("[streamers] ensure_membership_safely failed for #{user_or_id.inspect}: #{e.class} #{e.message}")
+      Rails.logger.warn(
+        "[streamers] ensure_membership_safely failed for #{user_or_id.inspect}: #{e.class} #{e.message}"
+      )
     end
 
     # Periodic sync to catch existing users and setting changes.
@@ -142,7 +152,9 @@ module ::Streamers
 
       group.add(user)
     rescue StandardError => e
-      Rails.logger.warn("[streamers] Could not add user #{user.id} to group #{group.name}: #{e.class} #{e.message}")
+      Rails.logger.warn(
+        "[streamers] Could not add user #{user.id} to group #{group.name}: #{e.class} #{e.message}"
+      )
     end
 
     def remove_from_group(group, user)
@@ -151,7 +163,9 @@ module ::Streamers
 
       group.remove(user)
     rescue StandardError => e
-      Rails.logger.warn("[streamers] Could not remove user #{user.id} from group #{group.name}: #{e.class} #{e.message}")
+      Rails.logger.warn(
+        "[streamers] Could not remove user #{user.id} from group #{group.name}: #{e.class} #{e.message}"
+      )
     end
   end
 end
