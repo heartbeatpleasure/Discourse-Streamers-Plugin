@@ -11,7 +11,11 @@ module Streamers
         format.json do
           render json: {
             live_streams: payload[:live_streams],
-            updated_at:   payload[:updated_at]
+            updated_at:   payload[:updated_at],
+
+            # Optional shared chat/discussion topic for the streams page.
+            # 0 disables the chat button in the UI.
+            chat_topic_id: ::SiteSetting.streamers_chat_topic_id.to_i
           }
         end
 
