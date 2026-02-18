@@ -14,9 +14,11 @@ end
 
 require_relative "lib/streamers/engine"
 require_relative "lib/streamers/group_membership"
-require_relative "jobs/scheduled/streamers_sync_group_membership"
 
 after_initialize do
+  # Ensure our scheduled job constant is loaded (needed when saving site settings).
+  load File.expand_path("jobs/scheduled/streamers_sync_group_membership.rb", __dir__)
+
   Discourse::Application.routes.append do
     get "/streams" => "streamers/streams#index"
     get "/streams.json" => "streamers/streams#index", defaults: { format: :json }
@@ -39,7 +41,6 @@ after_initialize do
 
   DiscourseEvent.on(:user_added_to_group) do |user, group|
     next unless SiteSetting.streamers_enabled?
-
     next unless ::Streamers::GroupMembership.streamers_group_match?(group)
 
     # Force-exclude wins always
@@ -58,7 +59,6 @@ after_initialize do
 
   DiscourseEvent.on(:user_removed_from_group) do |user, group|
     next unless SiteSetting.streamers_enabled?
-
     next unless ::Streamers::GroupMembership.streamers_group_match?(group)
 
     if (setting = ::Streamers::UserSetting.find_by(user_id: user.id))
