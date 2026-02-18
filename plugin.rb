@@ -68,6 +68,26 @@ after_initialize do
 
   # --- Automatic group management (Step 1) ---
 
+  # Fallback: ensure we also handle trust-level changes made via admin or other code paths
+  # that may not fire the promotion events consistently across Discourse versions.
+  add_model_callback(::User, :after_save) do
+    next unless SiteSetting.streamers_enabled?
+    next unless ::Streamers::GroupMembership.auto_manage?
+
+    trust_changed =
+      if respond_to?(:saved_change_to_trust_level?)
+        saved_change_to_trust_level?
+      elsif respond_to?(:saved_changes)
+        saved_changes.key?("trust_level")
+      else
+        previous_changes.key?("trust_level")
+      end
+
+    next unless trust_changed
+
+    ::Streamers::GroupMembership.ensure_membership_safely(self, trust_level_override: trust_level.to_i)
+  end
+
   # NOTE: Across Discourse versions, trust-level events differ in both name and arguments.
   # We try to read the *new* trust level from the event args when available, because some
   # callbacks fire before the user record reflects the updated trust_level.
