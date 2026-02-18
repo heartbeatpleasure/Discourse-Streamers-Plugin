@@ -13,6 +13,7 @@ module ::Streamers
 end
 
 require_relative "lib/streamers/engine"
+require_relative "lib/streamers/group_membership"
 
 after_initialize do
   Discourse::Application.routes.append do
@@ -32,21 +33,16 @@ after_initialize do
     mount ::Streamers::Engine, at: "/streamers"
   end
 
-  def excluded_streamers_usernames
-    raw = SiteSetting.streamers_force_exclude_from_streamers
-    list = raw.is_a?(Array) ? raw : raw.to_s.split("|")
-    list.map { |u| u.to_s.strip.downcase }.reject(&:blank?)
-  end
+  # Keep Streamers::UserSetting in sync with group membership.
+  # Group membership itself is optionally auto-managed in Streamers::GroupMembership.
 
   DiscourseEvent.on(:user_added_to_group) do |user, group|
     next unless SiteSetting.streamers_enabled?
 
-    group_name = SiteSetting.streamers_group_name.presence
-    next if group_name.blank?
-    next unless group.name == group_name
+    next unless ::Streamers::GroupMembership.streamers_group_match?(group)
 
     # Force-exclude wins always
-    if excluded_streamers_usernames.include?(user.username.to_s.downcase)
+    if ::Streamers::GroupMembership.excluded_usernames.include?(user.username.to_s.downcase)
       if (setting = ::Streamers::UserSetting.find_by(user_id: user.id))
         setting.update!(enabled: false)
       end
@@ -62,12 +58,29 @@ after_initialize do
   DiscourseEvent.on(:user_removed_from_group) do |user, group|
     next unless SiteSetting.streamers_enabled?
 
-    group_name = SiteSetting.streamers_group_name.presence
-    next if group_name.blank?
-    next unless group.name == group_name
+    next unless ::Streamers::GroupMembership.streamers_group_match?(group)
 
     if (setting = ::Streamers::UserSetting.find_by(user_id: user.id))
       setting.update!(enabled: false)
     end
+  end
+
+  # --- Automatic group management (Step 1) ---
+
+  DiscourseEvent.on(:user_promoted) do |user, *_|
+    ::Streamers::GroupMembership.ensure_membership!(user)
+  end
+
+  # Some Discourse versions use a different event name for trust-level changes.
+  DiscourseEvent.on(:user_trust_level_changed) do |user, *_|
+    ::Streamers::GroupMembership.ensure_membership!(user)
+  end
+
+  # When settings change, enqueue a sync to cover existing users.
+  DiscourseEvent.on(:site_setting_changed) do |name, *_|
+    next unless SiteSetting.streamers_enabled?
+    next unless ::Streamers::GroupMembership.settings_affect_group_membership?(name)
+
+    Jobs.enqueue(:streamers_sync_group_membership)
   end
 end
