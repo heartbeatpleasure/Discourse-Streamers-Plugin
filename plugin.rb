@@ -14,6 +14,7 @@ end
 
 require_relative "lib/streamers/engine"
 require_relative "lib/streamers/group_membership"
+require_relative "jobs/scheduled/streamers_sync_group_membership"
 
 after_initialize do
   Discourse::Application.routes.append do
