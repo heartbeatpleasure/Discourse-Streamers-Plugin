@@ -54,6 +54,14 @@ plugins:
     client: true
     type: list
 
+  # Optional per-tag chat channel mapping.
+  # Each entry should be in the format: "Tag:123" (or "Tag=123").
+  # When a streamer selects that Tag, the UI will use the mapped chat channel id.
+  # If a tag has no mapping (or no tag is selected), streamers_chat_topic_id is used as fallback.
+  streamers_stream_tag_chat_topic_map:
+    default: ""
+    type: list
+
   # NEW: cache TTL for /streams.json payload
   streamers_streams_cache_seconds:
     default: 10

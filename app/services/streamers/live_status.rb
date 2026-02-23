@@ -45,6 +45,10 @@ module Streamers
         safe_tag = sanitize_text(setting.try(:stream_tag))
         safe_tag = "" if safe_tag.length > 64
 
+        # Per-tag chat channel mapping with global fallback.
+        # Note: despite the setting name (historical), this is a Discourse Chat *channel* id.
+        stream_chat_topic_id = chat_topic_id_for_tag(safe_tag.presence)
+
         {
           user_id: user.id,
           username: user.username,
@@ -56,6 +60,7 @@ module Streamers
           bitrate: src["bitrate"].to_i,
           title: safe_title,
           stream_tag: (safe_tag.presence),
+          chat_topic_id: stream_chat_topic_id,
           stream_started_at: (src["stream_start_iso8601"] || src["stream_start"])
         }
       end
@@ -72,6 +77,49 @@ module Streamers
     end
 
     private
+
+    # Returns a chat channel id for a given tag (case-insensitive).
+    # Falls back to SiteSetting.streamers_chat_topic_id when no match is found.
+    def chat_topic_id_for_tag(tag)
+      fallback = ::SiteSetting.streamers_chat_topic_id.to_i
+      return fallback if tag.blank?
+
+      mapped = tag_chat_topic_map[tag.to_s.strip.downcase]
+      mapped_id = mapped.to_i
+      mapped_id.positive? ? mapped_id : fallback
+    end
+
+    # Parses SiteSetting.streamers_stream_tag_chat_topic_map into a hash:
+    #   { "asmr" => 33, "heartbeats" => 44 }
+    # Accepted formats per entry:
+    #   "ASMR:33" or "ASMR=33"
+    def tag_chat_topic_map
+      @tag_chat_topic_map ||= begin
+        raw = ::SiteSetting.streamers_stream_tag_chat_topic_map
+        list = raw.is_a?(Array) ? raw : raw.to_s.split("|")
+
+        map = {}
+        list.each do |entry|
+          e = entry.to_s.strip
+          next if e.blank?
+
+          # Split on first ':' or '='
+          parts = e.split(/[:=]/, 2)
+          next if parts.length != 2
+
+          tag = parts[0].to_s.strip
+          id_str = parts[1].to_s.strip
+          next if tag.blank? || id_str.blank?
+
+          id = id_str.to_i
+          next unless id.positive?
+
+          map[tag.downcase] = id
+        end
+
+        map
+      end
+    end
 
     def allowed_group
       group_name = SiteSetting.streamers_group_name.to_s
