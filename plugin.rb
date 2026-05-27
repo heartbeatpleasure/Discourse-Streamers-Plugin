@@ -16,8 +16,9 @@ require_relative "lib/streamers/engine"
 require_relative "lib/streamers/group_membership"
 
 after_initialize do
-  # Ensure our scheduled job constant is loaded (needed when saving site settings).
+  # Ensure our scheduled job constants are loaded (needed when saving site settings).
   load File.expand_path("jobs/scheduled/streamers_sync_group_membership.rb", __dir__)
+  load File.expand_path("jobs/scheduled/streamers_cleanup_listener_sessions.rb", __dir__)
 
   Discourse::Application.routes.append do
     get "/streams" => "streamers/streams#index"

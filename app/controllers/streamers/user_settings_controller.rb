@@ -27,6 +27,7 @@ module ::Streamers
         enabled: setting.enabled,
         has_stream_key: setting.stream_key_digest.present?,
         public_listen_url: setting.public_listen_url,
+        public_listen_url_enabled: SiteSetting.streamers_public_listen_url_enabled,
         last_stream_started_at: setting.last_stream_started_at,
         stream_tag: setting.try(:stream_tag),
         stream_tag_options: stream_tag_options

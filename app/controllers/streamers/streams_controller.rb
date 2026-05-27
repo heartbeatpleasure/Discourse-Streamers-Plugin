@@ -1,8 +1,12 @@
 # frozen_string_literal: true
 
+require "uri"
+require "rack/utils"
+
 module Streamers
   class StreamsController < ::ApplicationController
-    before_action :enforce_login_requirement
+    before_action :enforce_login_requirement, except: [:listen]
+    before_action :ensure_logged_in, only: [:listen]
 
     def index
       payload = cached_streams_payload
@@ -26,7 +30,7 @@ module Streamers
       end
     end
 
-    # NEW: lightweight endpoint for menu indicator
+    # Lightweight endpoint for menu indicator
     # Returns only live boolean + count
     def status
       payload = cached_status_payload
@@ -38,6 +42,28 @@ module Streamers
       }
     end
 
+    # Login-protected listen endpoint.
+    # The audio element points here, we issue a short signed token and then redirect to Icecast.
+    def listen
+      mount = normalize_mount(params[:mount].to_s)
+      raise Discourse::InvalidAccess if mount.blank?
+
+      setting = setting_for_mount(mount)
+      raise Discourse::InvalidAccess unless setting
+
+      listen_url = setting.direct_listen_url.to_s
+      raise Discourse::InvalidAccess if listen_url.blank?
+
+      token = ::Streamers::ListenerToken.generate(user: current_user, mount: mount)
+      redirect_url = append_query_params(listen_url, hb_token: token)
+
+      begin
+        redirect_to redirect_url, allow_other_host: true
+      rescue ArgumentError
+        redirect_to redirect_url
+      end
+    end
+
     private
 
     def enforce_login_requirement
@@ -46,10 +72,37 @@ module Streamers
       end
     end
 
+    def normalize_mount(mount)
+      s = mount.to_s.strip.split("?", 2).first.to_s
+      return "" if s.blank?
+
+      s.start_with?("/") ? s : "/#{s}"
+    end
+
+    def setting_for_mount(mount)
+      return nil if mount.blank?
+
+      ::Streamers::UserSetting.enabled.find_each do |setting|
+        return setting if normalize_mount(setting.public_mount) == mount
+      end
+
+      nil
+    end
+
+    def append_query_params(url, params_hash)
+      uri = URI.parse(url)
+      raise URI::InvalidURIError unless uri.is_a?(URI::HTTP) || uri.is_a?(URI::HTTPS)
+
+      current = ::Rack::Utils.parse_nested_query(uri.query.to_s)
+      params_hash.each { |key, value| current[key.to_s] = value }
+      uri.query = current.to_query
+      uri.to_s
+    end
+
     # Cached payload used by /streams.json
     def cached_streams_payload
       ttl = ::SiteSetting.streamers_streams_cache_seconds.to_i
-      key = cache_key("streams_payload_v1")
+      key = cache_key("streams_payload_v2")
 
       return compute_streams_payload if ttl <= 0
 
@@ -61,7 +114,7 @@ module Streamers
     # Cached payload used by /streams/status.json (smaller TTL by default)
     def cached_status_payload
       ttl = ::SiteSetting.streamers_streams_status_cache_seconds.to_i
-      key = cache_key("streams_status_payload_v1")
+      key = cache_key("streams_status_payload_v2")
 
       return compute_status_payload if ttl <= 0
 

@@ -45,6 +45,32 @@ plugins:
     default: false
     type: bool
 
+  streamers_icecast_listener_auth_enabled:
+    default: false
+    type: bool
+
+  streamers_icecast_listener_auth_secret:
+    default: ""
+    type: string
+    secret: true
+
+  streamers_public_listen_url_enabled:
+    default: true
+    client: true
+    type: bool
+
+  streamers_listener_token_ttl_seconds:
+    default: 300
+    type: integer
+    min: 30
+    max: 3600
+
+  streamers_listener_session_stale_minutes:
+    default: 720
+    type: integer
+    min: 30
+    max: 1440
+
   streamers_force_exclude_from_streamers:
     default: ""
     type: list

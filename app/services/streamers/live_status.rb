@@ -24,14 +24,18 @@ module Streamers
       return nil if settings.blank?
 
       settings_by_mount = {}
+      stream_user_ids = []
       settings.each do |setting|
         next unless setting.user
         next if excluded.include?(setting.user.username.to_s.downcase)
-        settings_by_mount[setting.mount] = setting
+        settings_by_mount[normalize_mount(setting.mount)] = setting
+        stream_user_ids << setting.user_id
       end
 
+      listener_summaries = ::Streamers::ListenerSession.summary_by_stream_user_ids(stream_user_ids)
+
       streams = sources.filter_map do |src|
-        mount = src["mount"].to_s
+        mount = normalize_mount(src["mount"].to_s)
         next if mount.blank?
 
         setting = settings_by_mount[mount]
@@ -49,14 +53,23 @@ module Streamers
         # Note: despite the setting name (historical), this is a Discourse Chat *channel* id.
         stream_chat_topic_id = chat_topic_id_for_tag(safe_tag.presence)
 
+        listener_total = src["listeners"].to_i
+        listener_summary = listener_summaries[user.id] || { known_session_count: 0, listeners: [] }
+        known_listener_count = listener_summary[:known_session_count].to_i
+        known_listeners = listener_total.positive? ? listener_summary[:listeners] : []
+        public_listener_count = [listener_total - known_listener_count, 0].max
+
         {
           user_id: user.id,
           username: user.username,
           name: (user.name.presence || user.username),
           avatar_template: user.avatar_template,
           mount: mount,
-          listen_url: safe_listen_url(setting),
-          listeners: src["listeners"].to_i,
+          listen_url: safe_authenticated_listen_url(setting),
+          listeners: listener_total,
+          known_listener_count: known_listener_count,
+          public_listener_count: public_listener_count,
+          known_listeners: known_listeners,
           bitrate: src["bitrate"].to_i,
           title: safe_title,
           stream_tag: (safe_tag.presence),
@@ -77,6 +90,13 @@ module Streamers
     end
 
     private
+
+    def normalize_mount(mount)
+      s = mount.to_s.strip.split("?", 2).first.to_s
+      return "" if s.blank?
+
+      s.start_with?("/") ? s : "/#{s}"
+    end
 
     # Returns a chat channel id for a given tag (case-insensitive).
     # Falls back to SiteSetting.streamers_chat_topic_id when no match is found.
@@ -141,19 +161,15 @@ module Streamers
       s.strip
     end
 
-    # Bouwt de publieke luister-URL op via de bestaande plugin-logica:
-    # UserSetting#public_listen_url (afgeleid van streamers_icecast_status_url)
-    #
-    # We laten alleen http/https door om ellende te voorkomen.
-    def safe_listen_url(setting)
-      url = setting.public_listen_url.to_s
-      return "" if url.blank?
+    # Bouwt de login-protected luister-URL op. Dit is bewust geen user-specifieke token,
+    # zodat /streams.json veilig gecachet kan blijven.
+    def safe_authenticated_listen_url(setting)
+      path = setting.authenticated_listen_path.to_s
+      return "" if path.blank?
+      return "" unless path.start_with?("/streamers/listen?")
 
-      uri = URI.parse(url)
-      return "" unless uri.is_a?(URI::HTTP) || uri.is_a?(URI::HTTPS)
-
-      url
-    rescue URI::InvalidURIError
+      path
+    rescue StandardError
       ""
     end
   end

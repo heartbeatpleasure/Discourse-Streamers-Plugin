@@ -12,6 +12,16 @@ en:
       listeners:
         one: "%{count} listener"
         other: "%{count} listeners"
+      listeners_title: "Listeners for %{username}"
+      listeners_known: "Known listeners"
+      listeners_none_known: "No logged-in listeners are known yet."
+      listeners_public:
+        one: "%{count} public/unknown listener"
+        other: "%{count} public/unknown listeners"
+      listener_sessions:
+        one: "%{count} connection"
+        other: "%{count} connections"
+      listeners_close: "Close"
 
     streamers_settings:
       heading: "Streaming setup"
@@ -22,6 +32,7 @@ en:
       load_error: "We could not load your streaming settings."
       mount_label: "Mount (path on the streaming server)"
       listen_url_label: "Public listen URL"
+      listen_url_disabled: "Public listen URLs are disabled. Listeners should use the Listen button on the streams page."
       copy: "Copy"
       copied: "Copied!"
       stream_key_label: "Stream key (password)"
