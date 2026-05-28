@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require "rack/utils"
-
 module Streamers
   class UserSetting < ActiveRecord::Base
     self.table_name = "streamers_user_settings"
@@ -69,7 +67,7 @@ module Streamers
       mount.presence || "/u/#{user_id}"
     end
 
-    # Directe Icecast luister-URL voor intern gebruik door de login-protected listen redirect.
+    # Directe Icecast luister-URL.
     # We leiden dit af van de status-URL, bijvoorbeeld:
     #   https://stream.heartbeatpleasure.com/radio/status-json.xsl
     # -> https://stream.heartbeatpleasure.com/radio + public_mount
@@ -83,18 +81,11 @@ module Streamers
 
     # Publieke luister-URL voor deze user.
     # Als public URLs uitgezet zijn tonen we deze niet meer aan streamers,
-    # maar direct_listen_url blijft intern beschikbaar voor de signed redirect.
+    # maar direct_listen_url blijft intern beschikbaar voor de signed playback URL.
     def public_listen_url
       return "" unless SiteSetting.streamers_public_listen_url_enabled
 
       direct_listen_url
-    end
-
-    # Login-protected listen path. Deze is veilig om in gecachete /streams.json payloads te zetten,
-    # omdat de user-specifieke token pas bij het aanklikken wordt gemaakt.
-    def authenticated_listen_path
-      query = Rack::Utils.build_query(mount: public_mount)
-      "/streamers/listen.mp3?#{query}"
     end
 
     private

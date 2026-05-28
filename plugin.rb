@@ -30,11 +30,7 @@ after_initialize do
     # Lightweight status endpoint for menu indicator
     get "/streams/status.json" => "streamers/streams#status", defaults: { format: :json }
 
-    # Login-protected audio redirect and Icecast callbacks.
-    # The .mp3 variant is intentionally supported so browser/audio requests bypass the
-    # Discourse SPA fallback and always hit Rails.
-    get  "/streamers/listen"         => "streamers/streams#listen"
-    get  "/streamers/listen.:format" => "streamers/streams#listen"
+    # Icecast URL-auth callbacks.
     post "/streamers/icecast/auth"            => "streamers/icecast_auth#create"
     post "/streamers/icecast/listener_add"    => "streamers/icecast_auth#listener_add"
     post "/streamers/icecast/listener_remove" => "streamers/icecast_auth#listener_remove"
