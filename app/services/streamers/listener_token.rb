@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "base64"
 require "json"
 require "openssl"
 require "securerandom"
@@ -11,23 +12,31 @@ module Streamers
     def self.generate(user:, mount:)
       raise ArgumentError, "missing user" unless user&.id
 
-      verifier.generate(
+      payload = {
         "user_id" => user.id,
         "mount" => normalize_mount(mount),
         "expires_at" => (Time.zone.now + ttl_seconds.seconds).to_i,
         "nonce" => SecureRandom.hex(12)
-      )
+      }
+
+      data = Base64.urlsafe_encode64(payload.to_json, padding: false)
+      signature = sign(data)
+      "#{data}.#{signature}"
     end
 
     def self.verify(token)
-      return nil if token.blank?
+      data, supplied_signature = token.to_s.split(".", 2)
+      return nil if data.blank? || supplied_signature.blank?
 
-      payload = verifier.verify(token.to_s)
+      expected_signature = sign(data)
+      return nil unless secure_compare(expected_signature, supplied_signature)
+
+      payload = JSON.parse(Base64.urlsafe_decode64(pad_base64(data)))
       return nil unless payload.is_a?(Hash)
       return nil if payload["expires_at"].to_i < Time.zone.now.to_i
 
       payload
-    rescue ActiveSupport::MessageVerifier::InvalidSignature, StandardError
+    rescue JSON::ParserError, ArgumentError, StandardError
       nil
     end
 
@@ -37,35 +46,37 @@ module Streamers
       ttl.clamp(30, 3600)
     end
 
-    def self.verifier
-      @verifier ||= build_verifier
+    def self.sign(data)
+      OpenSSL::HMAC.hexdigest("SHA256", signing_secret, data.to_s)
     end
-    private_class_method :verifier
+    private_class_method :sign
 
-    def self.build_verifier
-      secret = verifier_secret
+    def self.signing_secret
+      secret = ::SiteSetting.streamers_icecast_listener_auth_secret.to_s
+      return secret if secret.present?
 
-      begin
-        ActiveSupport::MessageVerifier.new(secret, digest: "SHA256", serializer: JSON)
-      rescue ArgumentError
-        # Compatibility fallback for older/newer ActiveSupport signatures.
-        ActiveSupport::MessageVerifier.new(secret)
-      end
+      ::Rails.application.key_generator.generate_key(PURPOSE, 64)
+    rescue StandardError
+      # Last-resort deterministic fallback for very early boot/test contexts.
+      # In production the listener auth secret should be configured.
+      "#{PURPOSE}:#{Rails.root}"
     end
-    private_class_method :build_verifier
+    private_class_method :signing_secret
 
-    def self.verifier_secret
-      base_secret =
-        if ::Rails.application.respond_to?(:secret_key_base)
-          ::Rails.application.secret_key_base
-        else
-          nil
-        end
+    def self.secure_compare(expected, supplied)
+      return false if expected.blank? || supplied.blank?
+      return false unless expected.bytesize == supplied.bytesize
 
-      base_secret = ::Rails.application.key_generator.generate_key(PURPOSE, 64) if base_secret.blank?
-      OpenSSL::HMAC.hexdigest("SHA256", base_secret, PURPOSE)
+      ActiveSupport::SecurityUtils.secure_compare(expected, supplied)
     end
-    private_class_method :verifier_secret
+    private_class_method :secure_compare
+
+    def self.pad_base64(value)
+      s = value.to_s
+      padding = (4 - (s.length % 4)) % 4
+      "#{s}#{"=" * padding}"
+    end
+    private_class_method :pad_base64
 
     def self.normalize_mount(mount)
       s = mount.to_s.strip.split("?", 2).first.to_s
