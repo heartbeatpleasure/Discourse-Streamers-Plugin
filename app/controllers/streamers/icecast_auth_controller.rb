@@ -93,6 +93,17 @@ module Streamers
 
       raw_mount = params[:mount].to_s
       mount = normalize_mount(raw_mount)
+
+      # Icecast applies URL listener-auth from the default mount to more than audio mounts.
+      # Status/UI requests such as /status-json.xsl also pass through listener_add.
+      # These must be allowed but never tracked as listeners, otherwise Discourse cannot
+      # read Icecast status-json.xsl and the streams page appears empty.
+      if system_listener_mount?(mount)
+        Rails.logger.info("[streamers] icecast_auth allow reason=system_mount mount=#{mount.inspect}")
+        accept!("system_mount")
+        return
+      end
+
       setting = stream_setting_for_mount(mount)
 
       unless setting
@@ -143,6 +154,11 @@ module Streamers
       mount = normalize_mount(params[:mount].to_s)
       client_id = listener_client_id
 
+      if system_listener_mount?(mount)
+        render plain: "OK", status: 200
+        return
+      end
+
       begin
         ::Streamers::ListenerSession.record_remove!(
           mount: mount,
@@ -175,6 +191,17 @@ module Streamers
       end
 
       nil
+    end
+
+    def system_listener_mount?(mount)
+      normalized = normalize_mount(mount)
+      return false if normalized.blank?
+
+      [
+        "/status-json.xsl",
+        "/status.xsl",
+        "/server_version.xsl"
+      ].include?(normalized)
     end
 
     def extract_listener_token(raw_mount)
