@@ -94,7 +94,7 @@ module Streamers
     # omdat de user-specifieke token pas bij het aanklikken wordt gemaakt.
     def authenticated_listen_path
       query = Rack::Utils.build_query(mount: public_mount)
-      "/streamers/listen?#{query}"
+      "/streamers/listen.mp3?#{query}"
     end
 
     private

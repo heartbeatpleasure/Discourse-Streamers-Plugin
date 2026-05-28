@@ -166,7 +166,7 @@ module Streamers
     def safe_authenticated_listen_url(setting)
       path = setting.authenticated_listen_path.to_s
       return "" if path.blank?
-      return "" unless path.start_with?("/streamers/listen?")
+      return "" unless path.start_with?("/streamers/listen?") || path.start_with?("/streamers/listen.mp3?")
 
       path
     rescue StandardError
