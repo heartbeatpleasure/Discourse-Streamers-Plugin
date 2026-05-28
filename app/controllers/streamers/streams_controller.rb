@@ -7,7 +7,6 @@ require "cgi"
 module Streamers
   class StreamsController < ::ApplicationController
     before_action :enforce_login_requirement, except: [:listen]
-    before_action :ensure_logged_in, only: [:listen]
 
     def index
       payload = cached_streams_payload
@@ -46,6 +45,14 @@ module Streamers
     # Login-protected listen endpoint.
     # The audio element points here, we issue a short signed token and then redirect to Icecast.
     def listen
+      ::Rails.logger.warn(
+        "[streamers] listen entered user_id=#{current_user&.id.inspect} " \
+        "params=#{safe_params_for_log.inspect} fullpath=#{request.fullpath.inspect} " \
+        "format=#{request.format.to_s.inspect}"
+      )
+
+      return deny_listen!("not_logged_in") unless current_user
+
       mount = normalize_mount(listen_mount_param)
       return deny_listen!("missing_mount") if mount.blank?
 
@@ -58,16 +65,12 @@ module Streamers
       token = ::Streamers::ListenerToken.generate(user: current_user, mount: mount)
       redirect_url = append_query_params(listen_url, hb_token: token)
 
-      ::Rails.logger.info(
+      ::Rails.logger.warn(
         "[streamers] listen redirect user_id=#{current_user&.id} mount=#{mount.inspect} " \
         "to=#{redacted_url(redirect_url).inspect}"
       )
 
-      begin
-        redirect_to redirect_url, allow_other_host: true
-      rescue ArgumentError
-        redirect_to redirect_url
-      end
+      redirect_to_external_url(redirect_url)
     rescue URI::InvalidURIError => e
       deny_listen!("invalid_listen_url", error: e.message)
     rescue StandardError => e
@@ -174,6 +177,21 @@ module Streamers
       uri.to_s
     rescue StandardError
       "[invalid_url]"
+    end
+
+
+    def redirect_to_external_url(url)
+      begin
+        redirect_to url, allow_other_host: true
+      rescue ArgumentError
+        redirect_to url
+      end
+    end
+
+    def safe_params_for_log
+      params.to_unsafe_h.except("hb_token", "secret", "password", "pass")
+    rescue StandardError
+      {}
     end
 
     def deny_listen!(reason, context = {})
