@@ -91,30 +91,47 @@ module Streamers
       direct_url = setting.direct_listen_url.to_s
       return "" if direct_url.blank?
 
-      # When listener auth is not active, do not block playback on a user-specific token.
-      # This keeps the existing/public listening behaviour intact while Icecast listener_add
-      # is still disabled or commented out during rollout.
-      return direct_url unless ::SiteSetting.streamers_icecast_listener_auth_enabled
-
-      if user
+      # Prefer a signed Icecast URL for every logged-in listener when listener tracking is
+      # configured. Public listen URLs may still be allowed as a fallback, but the normal
+      # Discourse player should carry hb_token so listener_add can map the Icecast client
+      # back to the Discourse user.
+      if user && listener_tracking_configured?
         token = ::Streamers::ListenerToken.generate(user: user, mount: setting.public_mount)
-        return append_query_params(direct_url, hb_token: token)
+        signed_url = append_query_params(direct_url, hb_token: token)
+
+        ::Rails.logger.info(
+          "[streamers] listen_url signed mount=#{setting.public_mount.inspect} " \
+          "user_id=#{user.id} listener_auth=#{::SiteSetting.streamers_icecast_listener_auth_enabled}"
+        )
+
+        return signed_url
       end
 
-      ::SiteSetting.streamers_public_listen_url_enabled ? direct_url : ""
+      return direct_url if ::SiteSetting.streamers_public_listen_url_enabled
+      return direct_url unless ::SiteSetting.streamers_icecast_listener_auth_enabled
+
+      ""
     rescue StandardError => e
       ::Rails.logger.warn(
-        "[streamers] failed to build listen_url setting_id=#{setting&.id.inspect} " \
-        "user_id=#{user&.id.inspect}: #{e.class}: #{e.message}"
+        "[streamers] failed to build signed listen_url setting_id=#{setting&.id.inspect} " \
+        "mount=#{setting&.public_mount.inspect} user_id=#{user&.id.inspect}: #{e.class}: #{e.message}"
       )
 
       direct_url = setting&.direct_listen_url.to_s
-      if direct_url.present? &&
-         (!::SiteSetting.streamers_icecast_listener_auth_enabled || ::SiteSetting.streamers_public_listen_url_enabled)
+      if direct_url.present? && ::SiteSetting.streamers_public_listen_url_enabled
+        ::Rails.logger.warn(
+          "[streamers] falling back to public listen_url setting_id=#{setting&.id.inspect} " \
+          "user_id=#{user&.id.inspect}"
+        )
         return direct_url
       end
 
       ""
+    end
+
+    def listener_tracking_configured?
+      ::SiteSetting.streamers_icecast_listener_auth_enabled ||
+        ::SiteSetting.streamers_icecast_listener_auth_secret.to_s.present?
     end
 
     def listen_mount_param
