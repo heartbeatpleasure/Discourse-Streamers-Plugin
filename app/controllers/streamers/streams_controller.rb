@@ -45,17 +45,21 @@ module Streamers
     # Login-protected listen endpoint.
     # The audio element points here, we issue a short signed token and then redirect to Icecast.
     def listen
-      mount = normalize_mount(params[:mount].to_s)
-      raise Discourse::InvalidAccess if mount.blank?
+      mount = listen_mount_param
+      return deny_listen!("missing_mount", raw_params: safe_listen_params) if mount.blank?
 
       setting = setting_for_mount(mount)
-      raise Discourse::InvalidAccess unless setting
+      return deny_listen!("unknown_mount", mount: mount, raw_params: safe_listen_params) unless setting
 
       listen_url = setting.direct_listen_url.to_s
-      raise Discourse::InvalidAccess if listen_url.blank?
+      return deny_listen!("missing_listen_url", mount: mount, setting_id: setting.id) if listen_url.blank?
 
       token = ::Streamers::ListenerToken.generate(user: current_user, mount: mount)
       redirect_url = append_query_params(listen_url, hb_token: token)
+
+      Rails.logger.info(
+        "[streamers] listen redirect user_id=#{current_user&.id} mount=#{mount.inspect} "         "target=#{listen_url.inspect}"
+      )
 
       begin
         redirect_to redirect_url, allow_other_host: true
@@ -77,6 +81,44 @@ module Streamers
       return "" if s.blank?
 
       s.start_with?("/") ? s : "/#{s}"
+    end
+
+    # Some Discourse/Rails route fallbacks can place the full request path in params[:path]
+    # instead of exposing query params normally. The audio player uses an encoded mount,
+    # while manual browser tests often use /u/3 unencoded; accept both forms defensively.
+    def listen_mount_param
+      raw = params[:mount].presence || request.query_parameters["mount"].presence
+
+      if raw.blank?
+        raw = ::Rack::Utils.parse_nested_query(request.query_string.to_s)["mount"].presence
+      end
+
+      if raw.blank? && params[:path].present?
+        raw = params[:path].to_s[/[?&]mount=([^&]+)/, 1]
+      end
+
+      if raw.blank?
+        raw = request.fullpath.to_s[/[?&]mount=([^&]+)/, 1]
+      end
+
+      raw = URI.decode_www_form_component(raw.to_s) if raw.present?
+      normalize_mount(raw)
+    rescue StandardError => e
+      Rails.logger.warn("[streamers] listen mount parse failed: #{e.class}: #{e.message}")
+      ""
+    end
+
+    def safe_listen_params
+      {
+        mount: params[:mount].to_s.presence,
+        path: params[:path].to_s.presence,
+        query_string: request.query_string.to_s.presence
+      }.compact
+    end
+
+    def deny_listen!(reason, context = {})
+      Rails.logger.warn("[streamers] listen deny reason=#{reason} user_id=#{current_user&.id} ctx=#{context.inspect}")
+      raise Discourse::InvalidAccess
     end
 
     def setting_for_mount(mount)

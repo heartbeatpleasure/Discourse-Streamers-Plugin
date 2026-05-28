@@ -27,9 +27,13 @@ after_initialize do
     # NEW: lightweight status endpoint for menu indicator
     get "/streams/status.json" => "streamers/streams#status", defaults: { format: :json }
 
-    # Login-protected listen redirect used by the frontend audio player.
-    # Registered on the main app as well as the engine route so Discourse always exposes it.
-    get "/streamers/listen" => "streamers/streams#listen"
+    # Login-protected listen redirect and Icecast URL-auth callbacks.
+    # Register these explicitly in the main app routes so they are visible even if the mounted
+    # engine routes are not picked up early enough during route generation.
+    get  "/streamers/listen"                  => "streamers/streams#listen"
+    post "/streamers/icecast/auth"            => "streamers/icecast_auth#create"
+    post "/streamers/icecast/listener_add"    => "streamers/icecast_auth#listener_add"
+    post "/streamers/icecast/listener_remove" => "streamers/icecast_auth#listener_remove"
 
     get  "/streamers/me"            => "streamers/user_settings#show"
     get  "/streamers/me.json"       => "streamers/user_settings#show", defaults: { format: :json }
@@ -37,12 +41,6 @@ after_initialize do
 
     # Update the user's selected stream tag (single select)
     post "/streamers/me/stream_tag" => "streamers/user_settings#update_stream_tag", defaults: { format: :json }
-
-    # Icecast callback routes are also registered explicitly on the main app.
-    # This keeps the callbacks reachable even if engine route introspection/loading differs by Discourse version.
-    post "/streamers/icecast/auth" => "streamers/icecast_auth#create"
-    post "/streamers/icecast/listener_add" => "streamers/icecast_auth#listener_add"
-    post "/streamers/icecast/listener_remove" => "streamers/icecast_auth#listener_remove"
 
     mount ::Streamers::Engine, at: "/streamers"
   end
