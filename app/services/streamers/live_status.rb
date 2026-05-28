@@ -65,7 +65,7 @@ module Streamers
           name: (user.name.presence || user.username),
           avatar_template: user.avatar_template,
           mount: mount,
-          listen_url: safe_authenticated_listen_url(setting),
+          listen_url: "",
           listeners: listener_total,
           known_listener_count: known_listener_count,
           public_listener_count: public_listener_count,
@@ -161,16 +161,7 @@ module Streamers
       s.strip
     end
 
-    # Bouwt de login-protected luister-URL op. Dit is bewust geen user-specifieke token,
-    # zodat /streams.json veilig gecachet kan blijven.
-    def safe_authenticated_listen_url(setting)
-      path = setting.authenticated_listen_path.to_s
-      return "" if path.blank?
-      return "" unless path.start_with?("/streamers/listen?") || path.start_with?("/streamers/listen.mp3?")
-
-      path
-    rescue StandardError
-      ""
-    end
+    # /streams.json receives a user-specific listen_url in StreamsController.
+    # LiveStatus deliberately keeps the cached raw stream payload user-neutral.
   end
 end

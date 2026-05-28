@@ -2,11 +2,11 @@
 
 require "uri"
 require "rack/utils"
-require "cgi"
 
 module Streamers
   class StreamsController < ::ApplicationController
     before_action :enforce_login_requirement, except: [:listen]
+    before_action :ensure_logged_in, only: [:listen]
 
     def index
       payload = cached_streams_payload
@@ -14,7 +14,7 @@ module Streamers
       respond_to do |format|
         format.json do
           render json: {
-            live_streams: payload[:live_streams],
+            live_streams: live_streams_for_response(payload[:live_streams]),
             updated_at:   payload[:updated_at],
 
             # Optional shared chat/discussion topic for the streams page.
@@ -42,40 +42,24 @@ module Streamers
       }
     end
 
-    # Login-protected listen endpoint.
-    # The audio element points here, we issue a short signed token and then redirect to Icecast.
+    # Compatibility endpoint. The player no longer depends on this route because Discourse's
+    # client-side router can intercept custom HTML routes in some setups. /streams.json now
+    # receives a signed direct Icecast URL instead.
     def listen
-      ::Rails.logger.warn(
-        "[streamers] listen entered user_id=#{current_user&.id.inspect} " \
-        "params=#{safe_params_for_log.inspect} fullpath=#{request.fullpath.inspect} " \
-        "format=#{request.format.to_s.inspect}"
-      )
-
-      return deny_listen!("not_logged_in") unless current_user
-
-      mount = normalize_mount(listen_mount_param)
-      return deny_listen!("missing_mount") if mount.blank?
+      mount = normalize_mount(params[:mount].to_s)
+      raise Discourse::InvalidAccess if mount.blank?
 
       setting = setting_for_mount(mount)
-      return deny_listen!("unknown_or_disabled_mount", mount: mount) unless setting
+      raise Discourse::InvalidAccess unless setting
 
-      listen_url = setting.direct_listen_url.to_s
-      return deny_listen!("blank_listen_url", mount: mount, user_id: setting.user_id) if listen_url.blank?
+      listen_url = signed_or_public_listen_url(setting, current_user)
+      raise Discourse::InvalidAccess if listen_url.blank?
 
-      token = ::Streamers::ListenerToken.generate(user: current_user, mount: mount)
-      redirect_url = append_query_params(listen_url, hb_token: token)
-
-      ::Rails.logger.warn(
-        "[streamers] listen redirect user_id=#{current_user&.id} mount=#{mount.inspect} " \
-        "to=#{redacted_url(redirect_url).inspect}"
-      )
-
-      redirect_to_external_url(redirect_url)
-    rescue URI::InvalidURIError => e
-      deny_listen!("invalid_listen_url", error: e.message)
-    rescue StandardError => e
-      ::Rails.logger.warn("[streamers] listen error #{e.class}: #{e.message}")
-      raise
+      begin
+        redirect_to listen_url, allow_other_host: true
+      rescue ArgumentError
+        redirect_to listen_url
+      end
     end
 
     private
@@ -86,60 +70,33 @@ module Streamers
       end
     end
 
-    # Discourse/Rails route handling can sometimes expose the original URL through params[:path]
-    # instead of normal query params. Be deliberately tolerant so the player keeps working with
-    # both encoded and unencoded mounts:
-    #   /streamers/listen?mount=%2Fu%2F3
-    #   /streamers/listen?mount=/u/3
-    def listen_mount_param
-      candidates = []
-      candidates << params[:mount]
-      candidates << request.query_parameters["mount"]
+    def live_streams_for_response(streams)
+      Array(streams).map do |stream|
+        item = stream.respond_to?(:deep_dup) ? stream.deep_dup : stream.dup
+        mount = normalize_mount(item[:mount] || item["mount"])
+        setting = setting_for_mount(mount)
 
-      begin
-        candidates << request.GET["mount"]
-      rescue StandardError
-        # ignore Rack parse edge cases
+        item[:listen_url] = setting ? signed_or_public_listen_url(setting, current_user) : ""
+        item
+      end
+    end
+
+    def signed_or_public_listen_url(setting, user)
+      direct_url = setting.direct_listen_url.to_s
+      return "" if direct_url.blank?
+
+      if user
+        token = ::Streamers::ListenerToken.generate(user: user, mount: setting.public_mount)
+        return append_query_params(direct_url, hb_token: token)
       end
 
-      candidates << parsed_mount_from_query(request.query_string)
-      candidates << parsed_mount_from_query(request.fullpath)
-      candidates << parsed_mount_from_query(params[:path].to_s)
-
-      candidates.each do |candidate|
-        mount = decode_mount_candidate(candidate)
-        return mount if mount.present?
-      end
-
+      ::SiteSetting.streamers_public_listen_url_enabled ? direct_url : ""
+    rescue StandardError => e
+      ::Rails.logger.warn(
+        "[streamers] failed to build listen_url setting_id=#{setting&.id.inspect} " \
+        "user_id=#{user&.id.inspect}: #{e.class}: #{e.message}"
+      )
       ""
-    end
-
-    def parsed_mount_from_query(value)
-      s = value.to_s
-      return "" if s.blank?
-
-      query = s.include?("?") ? s.split("?", 2)[1].to_s : s
-      return "" if query.blank?
-
-      parsed = ::Rack::Utils.parse_nested_query(query)
-      parsed["mount"].to_s.presence || query[/[?&]?mount=([^&]+)/, 1].to_s
-    rescue StandardError
-      s[/[?&]mount=([^&]+)/, 1].to_s
-    end
-
-    def decode_mount_candidate(value)
-      s = value.to_s.strip
-      return "" if s.blank?
-
-      2.times do
-        decoded = ::CGI.unescape(s)
-        break if decoded == s
-        s = decoded
-      end
-
-      s
-    rescue StandardError
-      value.to_s.strip
     end
 
     def normalize_mount(mount)
@@ -169,47 +126,11 @@ module Streamers
       uri.to_s
     end
 
-    def redacted_url(url)
-      uri = URI.parse(url.to_s)
-      params = ::Rack::Utils.parse_nested_query(uri.query.to_s)
-      params["hb_token"] = "[redacted]" if params.key?("hb_token")
-      uri.query = params.present? ? params.to_query : nil
-      uri.to_s
-    rescue StandardError
-      "[invalid_url]"
-    end
-
-
-    def redirect_to_external_url(url)
-      begin
-        redirect_to url, allow_other_host: true
-      rescue ArgumentError
-        redirect_to url
-      end
-    end
-
-    def safe_params_for_log
-      params.to_unsafe_h.except("hb_token", "secret", "password", "pass")
-    rescue StandardError
-      {}
-    end
-
-    def deny_listen!(reason, context = {})
-      ::Rails.logger.warn(
-        "[streamers] listen denied reason=#{reason} user_id=#{current_user&.id.inspect} " \
-        "params=#{params.to_unsafe_h.inspect} fullpath=#{request.fullpath.inspect} ctx=#{context.inspect}"
-      )
-
-      respond_to do |format|
-        format.json { render json: { error: reason }, status: 404 }
-        format.any  { render plain: "Stream not available", status: 404 }
-      end
-    end
-
-    # Cached payload used by /streams.json
+    # Cached payload used by /streams.json.
+    # The cached payload intentionally does not contain user-specific listen tokens.
     def cached_streams_payload
       ttl = ::SiteSetting.streamers_streams_cache_seconds.to_i
-      key = cache_key("streams_payload_v2")
+      key = cache_key("streams_payload_v4")
 
       return compute_streams_payload if ttl <= 0
 
@@ -221,7 +142,7 @@ module Streamers
     # Cached payload used by /streams/status.json (smaller TTL by default)
     def cached_status_payload
       ttl = ::SiteSetting.streamers_streams_status_cache_seconds.to_i
-      key = cache_key("streams_status_payload_v2")
+      key = cache_key("streams_status_payload_v4")
 
       return compute_status_payload if ttl <= 0
 
