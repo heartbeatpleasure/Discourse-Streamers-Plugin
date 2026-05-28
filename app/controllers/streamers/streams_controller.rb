@@ -2,6 +2,7 @@
 
 require "uri"
 require "rack/utils"
+require "cgi"
 
 module Streamers
   class StreamsController < ::ApplicationController
@@ -45,20 +46,21 @@ module Streamers
     # Login-protected listen endpoint.
     # The audio element points here, we issue a short signed token and then redirect to Icecast.
     def listen
-      mount = listen_mount_param
-      return deny_listen!("missing_mount", raw_params: safe_listen_params) if mount.blank?
+      mount = normalize_mount(listen_mount_param)
+      return deny_listen!("missing_mount") if mount.blank?
 
       setting = setting_for_mount(mount)
-      return deny_listen!("unknown_mount", mount: mount, raw_params: safe_listen_params) unless setting
+      return deny_listen!("unknown_or_disabled_mount", mount: mount) unless setting
 
       listen_url = setting.direct_listen_url.to_s
-      return deny_listen!("missing_listen_url", mount: mount, setting_id: setting.id) if listen_url.blank?
+      return deny_listen!("blank_listen_url", mount: mount, user_id: setting.user_id) if listen_url.blank?
 
       token = ::Streamers::ListenerToken.generate(user: current_user, mount: mount)
       redirect_url = append_query_params(listen_url, hb_token: token)
 
-      Rails.logger.info(
-        "[streamers] listen redirect user_id=#{current_user&.id} mount=#{mount.inspect} "         "target=#{listen_url.inspect}"
+      ::Rails.logger.info(
+        "[streamers] listen redirect user_id=#{current_user&.id} mount=#{mount.inspect} " \
+        "to=#{redacted_url(redirect_url).inspect}"
       )
 
       begin
@@ -66,6 +68,11 @@ module Streamers
       rescue ArgumentError
         redirect_to redirect_url
       end
+    rescue URI::InvalidURIError => e
+      deny_listen!("invalid_listen_url", error: e.message)
+    rescue StandardError => e
+      ::Rails.logger.warn("[streamers] listen error #{e.class}: #{e.message}")
+      raise
     end
 
     private
@@ -76,49 +83,67 @@ module Streamers
       end
     end
 
+    # Discourse/Rails route handling can sometimes expose the original URL through params[:path]
+    # instead of normal query params. Be deliberately tolerant so the player keeps working with
+    # both encoded and unencoded mounts:
+    #   /streamers/listen?mount=%2Fu%2F3
+    #   /streamers/listen?mount=/u/3
+    def listen_mount_param
+      candidates = []
+      candidates << params[:mount]
+      candidates << request.query_parameters["mount"]
+
+      begin
+        candidates << request.GET["mount"]
+      rescue StandardError
+        # ignore Rack parse edge cases
+      end
+
+      candidates << parsed_mount_from_query(request.query_string)
+      candidates << parsed_mount_from_query(request.fullpath)
+      candidates << parsed_mount_from_query(params[:path].to_s)
+
+      candidates.each do |candidate|
+        mount = decode_mount_candidate(candidate)
+        return mount if mount.present?
+      end
+
+      ""
+    end
+
+    def parsed_mount_from_query(value)
+      s = value.to_s
+      return "" if s.blank?
+
+      query = s.include?("?") ? s.split("?", 2)[1].to_s : s
+      return "" if query.blank?
+
+      parsed = ::Rack::Utils.parse_nested_query(query)
+      parsed["mount"].to_s.presence || query[/[?&]?mount=([^&]+)/, 1].to_s
+    rescue StandardError
+      s[/[?&]mount=([^&]+)/, 1].to_s
+    end
+
+    def decode_mount_candidate(value)
+      s = value.to_s.strip
+      return "" if s.blank?
+
+      2.times do
+        decoded = ::CGI.unescape(s)
+        break if decoded == s
+        s = decoded
+      end
+
+      s
+    rescue StandardError
+      value.to_s.strip
+    end
+
     def normalize_mount(mount)
       s = mount.to_s.strip.split("?", 2).first.to_s
       return "" if s.blank?
 
       s.start_with?("/") ? s : "/#{s}"
-    end
-
-    # Some Discourse/Rails route fallbacks can place the full request path in params[:path]
-    # instead of exposing query params normally. The audio player uses an encoded mount,
-    # while manual browser tests often use /u/3 unencoded; accept both forms defensively.
-    def listen_mount_param
-      raw = params[:mount].presence || request.query_parameters["mount"].presence
-
-      if raw.blank?
-        raw = ::Rack::Utils.parse_nested_query(request.query_string.to_s)["mount"].presence
-      end
-
-      if raw.blank? && params[:path].present?
-        raw = params[:path].to_s[/[?&]mount=([^&]+)/, 1]
-      end
-
-      if raw.blank?
-        raw = request.fullpath.to_s[/[?&]mount=([^&]+)/, 1]
-      end
-
-      raw = URI.decode_www_form_component(raw.to_s) if raw.present?
-      normalize_mount(raw)
-    rescue StandardError => e
-      Rails.logger.warn("[streamers] listen mount parse failed: #{e.class}: #{e.message}")
-      ""
-    end
-
-    def safe_listen_params
-      {
-        mount: params[:mount].to_s.presence,
-        path: params[:path].to_s.presence,
-        query_string: request.query_string.to_s.presence
-      }.compact
-    end
-
-    def deny_listen!(reason, context = {})
-      Rails.logger.warn("[streamers] listen deny reason=#{reason} user_id=#{current_user&.id} ctx=#{context.inspect}")
-      raise Discourse::InvalidAccess
     end
 
     def setting_for_mount(mount)
@@ -139,6 +164,28 @@ module Streamers
       params_hash.each { |key, value| current[key.to_s] = value }
       uri.query = current.to_query
       uri.to_s
+    end
+
+    def redacted_url(url)
+      uri = URI.parse(url.to_s)
+      params = ::Rack::Utils.parse_nested_query(uri.query.to_s)
+      params["hb_token"] = "[redacted]" if params.key?("hb_token")
+      uri.query = params.present? ? params.to_query : nil
+      uri.to_s
+    rescue StandardError
+      "[invalid_url]"
+    end
+
+    def deny_listen!(reason, context = {})
+      ::Rails.logger.warn(
+        "[streamers] listen denied reason=#{reason} user_id=#{current_user&.id.inspect} " \
+        "params=#{params.to_unsafe_h.inspect} fullpath=#{request.fullpath.inspect} ctx=#{context.inspect}"
+      )
+
+      respond_to do |format|
+        format.json { render json: { error: reason }, status: 404 }
+        format.any  { render plain: "Stream not available", status: 404 }
+      end
     end
 
     # Cached payload used by /streams.json

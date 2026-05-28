@@ -27,9 +27,9 @@ after_initialize do
     # NEW: lightweight status endpoint for menu indicator
     get "/streams/status.json" => "streamers/streams#status", defaults: { format: :json }
 
-    # Login-protected listen redirect and Icecast URL-auth callbacks.
-    # Register these explicitly in the main app routes so they are visible even if the mounted
-    # engine routes are not picked up early enough during route generation.
+    # Login-protected audio redirect and Icecast callbacks.
+    # These are registered explicitly in the main app routes so they do not depend on
+    # the mounted engine route order.
     get  "/streamers/listen"                  => "streamers/streams#listen"
     post "/streamers/icecast/auth"            => "streamers/icecast_auth#create"
     post "/streamers/icecast/listener_add"    => "streamers/icecast_auth#listener_add"
