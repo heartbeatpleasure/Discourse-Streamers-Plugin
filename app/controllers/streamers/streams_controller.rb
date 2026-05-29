@@ -5,8 +5,7 @@ require "rack/utils"
 
 module Streamers
   class StreamsController < ::ApplicationController
-    before_action :enforce_login_requirement, except: [:listen]
-    before_action :ensure_logged_in, only: [:listen]
+    before_action :enforce_login_requirement
 
     def index
       payload = cached_streams_payload
@@ -15,7 +14,7 @@ module Streamers
         format.json do
           render json: {
             live_streams: live_streams_for_response(payload[:live_streams]),
-            updated_at:   payload[:updated_at],
+            updated_at: payload[:updated_at],
 
             # Optional shared chat/discussion topic for the streams page.
             # 0 disables the chat button in the UI.
@@ -42,26 +41,6 @@ module Streamers
       }
     end
 
-    # Compatibility endpoint. The player no longer depends on this route because Discourse's
-    # client-side router can intercept custom HTML routes in some setups. /streams.json now
-    # receives a signed direct Icecast URL whenever listener auth needs it.
-    def listen
-      mount = normalize_mount(listen_mount_param)
-      raise Discourse::InvalidAccess if mount.blank?
-
-      setting = setting_for_mount(mount)
-      raise Discourse::InvalidAccess unless setting
-
-      listen_url = signed_or_public_listen_url(setting, current_user)
-      raise Discourse::InvalidAccess if listen_url.blank?
-
-      begin
-        redirect_to listen_url, allow_other_host: true
-      rescue ArgumentError
-        redirect_to listen_url
-      end
-    end
-
     private
 
     def enforce_login_requirement
@@ -75,13 +54,27 @@ module Streamers
         item = stream.respond_to?(:deep_dup) ? stream.deep_dup : stream.dup
         mount = normalize_mount(stream_value(item, :mount))
         setting = setting_for_mount(mount)
-        listen_url = setting ? signed_or_public_listen_url(setting, current_user) : ""
+        block_reason = listener_block_reason(setting)
+
+        listen_url = if setting && block_reason.blank?
+          signed_or_public_listen_url(setting, current_user)
+        else
+          ""
+        end
 
         write_stream_value(item, :listen_url, listen_url)
+        write_stream_value(item, :listener_blocked, block_reason.present?)
+        write_stream_value(item, :listener_blocked_reason, block_reason)
         apply_listener_details_visibility!(item)
 
         item
       end
+    end
+
+    def listener_block_reason(setting)
+      return nil unless setting && current_user
+
+      ::Streamers::ListenerBlocking.block_reason(stream_user_id: setting.user_id, listener_user: current_user)
     end
 
     def apply_listener_details_visibility!(item)
@@ -150,14 +143,7 @@ module Streamers
       # back to the Discourse user.
       if user && listener_tracking_configured?
         token = ::Streamers::ListenerToken.generate(user: user, mount: setting.public_mount)
-        signed_url = append_query_params(direct_url, hb_token: token)
-
-        ::Rails.logger.info(
-          "[streamers] listen_url signed mount=#{setting.public_mount.inspect} " \
-          "user_id=#{user.id} listener_auth=#{::SiteSetting.streamers_icecast_listener_auth_enabled}"
-        )
-
-        return signed_url
+        return append_query_params(direct_url, hb_token: token)
       end
 
       return direct_url if ::SiteSetting.streamers_public_listen_url_enabled
@@ -185,20 +171,6 @@ module Streamers
     def listener_tracking_configured?
       ::SiteSetting.streamers_icecast_listener_auth_enabled ||
         ::SiteSetting.streamers_icecast_listener_auth_secret.to_s.present?
-    end
-
-    def listen_mount_param
-      raw = params[:mount].presence
-      raw ||= request.query_parameters["mount"].presence
-      raw ||= request.GET["mount"].presence if request.respond_to?(:GET)
-      raw ||= request.query_string.to_s[/[?&]?mount=([^&]+)/, 1]
-      raw ||= request.fullpath.to_s[/[?&]mount=([^&]+)/, 1]
-      raw ||= params[:path].to_s[/[?&]mount=([^&]+)/, 1]
-      return "" if raw.blank?
-
-      ::Rack::Utils.unescape(raw.to_s)
-    rescue StandardError
-      raw.to_s
     end
 
     def normalize_mount(mount)
@@ -232,7 +204,7 @@ module Streamers
     # The cached payload intentionally does not contain user-specific listen tokens.
     def cached_streams_payload
       ttl = ::SiteSetting.streamers_streams_cache_seconds.to_i
-      key = cache_key("streams_payload_v5")
+      key = cache_key("streams_payload_v6")
 
       return compute_streams_payload if ttl <= 0
 
@@ -244,7 +216,7 @@ module Streamers
     # Cached payload used by /streams/status.json (smaller TTL by default)
     def cached_status_payload
       ttl = ::SiteSetting.streamers_streams_status_cache_seconds.to_i
-      key = cache_key("streams_status_payload_v5")
+      key = cache_key("streams_status_payload_v6")
 
       return compute_status_payload if ttl <= 0
 

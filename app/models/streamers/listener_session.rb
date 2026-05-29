@@ -53,6 +53,10 @@ module Streamers
       active.where(stream_user_id: ids).includes(:user).find_each do |session|
         summary = grouped[session.stream_user_id]
         next unless session.user
+        next if ::Streamers::ListenerBlocking.blocked?(
+          stream_user_id: session.stream_user_id,
+          listener_user: session.user
+        )
 
         summary[:known_session_count] += 1
         listener = summary[:listeners][session.user_id] ||= {

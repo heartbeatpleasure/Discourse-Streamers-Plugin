@@ -7,6 +7,7 @@ en:
       error_loading: "There was a problem loading the live streams."
       last_updated: "Last updated %{time}"
       listen: "Listen"
+      listen_unavailable: "Unavailable"
       profile: "Profile"
       chat: "Open chat"
       listeners:
@@ -67,9 +68,23 @@ en:
       stream_tag_saving: "Saving…"
       stream_tag_saved: "Saved"
       stream_tag_save_error: "We could not save your stream tag. Please try again."
+      listener_blocks_title: "Blocked listeners"
+      listener_blocks_help: "Users listed here cannot listen to your stream through the Discourse Listen button. If public listen URLs remain enabled, direct external links may still count as public/unknown listeners."
+      listener_blocks_add_placeholder: "Username"
+      listener_blocks_add: "Block"
+      listener_blocks_added: "Blocked listener added."
+      listener_blocks_remove: "Remove"
+      listener_blocks_empty: "You have not blocked any listeners."
+      listener_blocks_ignored_count:
+        one: "Also blocked through ignored users: %{count} user"
+        other: "Also blocked through ignored users: %{count} users"
+      listener_blocks_staff_bypass: "Staff can still listen because staff bypass is enabled."
+      listener_blocks_add_error: "We could not block this user. Check the username and try again."
+      listener_blocks_remove_error: "We could not remove this blocked listener. Please try again."
 
     hb_streamers:
       listen: "Listen"
+      listen_unavailable: "Unavailable"
       pause: "Pause"
       resume: "Resume"
       play: "Play"

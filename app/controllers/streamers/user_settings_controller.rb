@@ -30,7 +30,8 @@ module ::Streamers
         public_listen_url_enabled: SiteSetting.streamers_public_listen_url_enabled,
         last_stream_started_at: setting.last_stream_started_at,
         stream_tag: setting.try(:stream_tag),
-        stream_tag_options: stream_tag_options
+        stream_tag_options: stream_tag_options,
+        listener_blocks: listener_blocks_payload(current_user)
       )
     end
 
@@ -80,6 +81,59 @@ module ::Streamers
       render_json_dump(stream_tag: setting.stream_tag)
     end
 
+    # POST /streamers/me/listener_blocks
+    # Params:
+    #   username: "example"
+    def add_listener_block
+      raise Discourse::InvalidAccess unless allowed_to_stream?(current_user)
+
+      username = params[:username].to_s.strip.delete_prefix("@")
+      if username.blank?
+        render json: { errors: ["missing_username"] }, status: 422
+        return
+      end
+
+      target = ::User.find_by(username_lower: username.downcase)
+      target ||= ::User.find_by(username: username)
+
+      unless target
+        render json: { errors: ["unknown_user"] }, status: 404
+        return
+      end
+
+      if target.id == current_user.id
+        render json: { errors: ["cannot_block_self"] }, status: 422
+        return
+      end
+
+      ::Streamers::ListenerBlock.find_or_create_by!(
+        stream_user_id: current_user.id,
+        blocked_user_id: target.id
+      )
+      end_active_listener_sessions_for_blocked_user!(current_user.id, target.id)
+
+      render_json_dump(listener_blocks: listener_blocks_payload(current_user))
+    rescue ActiveRecord::RecordInvalid => e
+      render json: { errors: e.record.errors.full_messages }, status: 422
+    end
+
+    # DELETE /streamers/me/listener_blocks/:user_id
+    def remove_listener_block
+      raise Discourse::InvalidAccess unless allowed_to_stream?(current_user)
+
+      blocked_user_id = params[:user_id].to_i
+      if blocked_user_id <= 0
+        render json: { errors: ["missing_user_id"] }, status: 422
+        return
+      end
+
+      ::Streamers::ListenerBlock
+        .where(stream_user_id: current_user.id, blocked_user_id: blocked_user_id)
+        .delete_all
+
+      render_json_dump(listener_blocks: listener_blocks_payload(current_user))
+    end
+
     private
 
     def allowed_to_stream?(user)
@@ -115,6 +169,33 @@ module ::Streamers
       end
 
       setting
+    end
+
+    def end_active_listener_sessions_for_blocked_user!(stream_user_id, blocked_user_id)
+      now = Time.zone.now
+      ::Streamers::ListenerSession
+        .active
+        .where(stream_user_id: stream_user_id, user_id: blocked_user_id)
+        .update_all(ended_at: now, updated_at: now)
+    rescue StandardError => e
+      Rails.logger.warn(
+        "[streamers] failed to end blocked listener sessions " \
+        "stream_user_id=#{stream_user_id.inspect} blocked_user_id=#{blocked_user_id.inspect}: " \
+        "#{e.class}: #{e.message}"
+      )
+    end
+
+    def listener_blocks_payload(user)
+      manual = ::Streamers::ListenerBlock.manual_blocked_users_for(user.id)
+      ignored_enabled = ::Streamers::ListenerBlocking.ignored_blocking_enabled?
+
+      {
+        manual_blocked_listeners: manual,
+        manual_blocked_listener_count: manual.length,
+        ignored_listener_blocking_enabled: ignored_enabled,
+        ignored_blocked_listener_count: ignored_enabled ? ::Streamers::ListenerBlocking.ignored_blocked_count_for(user.id) : 0,
+        staff_bypass_listener_blocks: ::SiteSetting.streamers_staff_bypass_listener_blocks
+      }
     end
 
     def stream_tag_options

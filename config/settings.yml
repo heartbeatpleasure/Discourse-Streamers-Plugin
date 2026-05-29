@@ -75,6 +75,14 @@ plugins:
     default: "everyone"
     type: string
 
+  streamers_listener_block_source:
+    default: "custom_only"
+    type: string
+
+  streamers_staff_bypass_listener_blocks:
+    default: true
+    type: bool
+
   streamers_force_exclude_from_streamers:
     default: ""
     type: list

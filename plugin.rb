@@ -42,6 +42,10 @@ after_initialize do
     # Update the user's selected stream tag (single select)
     post "/streamers/me/stream_tag" => "streamers/user_settings#update_stream_tag", defaults: { format: :json }
 
+    # Manage the current streamer's manual listener block list.
+    post   "/streamers/me/listener_blocks"          => "streamers/user_settings#add_listener_block", defaults: { format: :json }
+    delete "/streamers/me/listener_blocks/:user_id" => "streamers/user_settings#remove_listener_block", defaults: { format: :json }
+
     mount ::Streamers::Engine, at: "/streamers"
   end
 

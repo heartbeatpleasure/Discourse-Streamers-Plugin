@@ -121,6 +121,16 @@ module Streamers
       end
 
       if listener_user
+        block_reason = ::Streamers::ListenerBlocking.block_reason(
+          stream_user_id: setting.user_id,
+          listener_user: listener_user
+        )
+
+        if block_reason.present?
+          deny!("listener_blocked", mount: mount, user_id: listener_user.id, source: block_reason)
+          return
+        end
+
         begin
           ::Streamers::ListenerSession.record_add!(
             stream_user_id: setting.user_id,
