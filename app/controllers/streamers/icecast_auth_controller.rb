@@ -114,6 +114,15 @@ module Streamers
       token = extract_listener_token(raw_mount)
       listener_user = user_from_listener_token(token, mount)
       token_required = listener_token_required?
+      token_present = token.present?
+
+      # If a client supplies a token, it must be valid. Do not degrade an expired,
+      # tampered or wrong-mount token to a public/unknown listener, otherwise a paused
+      # browser audio element can resume with an old URL and reappear as anonymous.
+      if token_present && !listener_user
+        deny!("listener_token_invalid", mount: mount)
+        return
+      end
 
       if token_required && !listener_user
         deny!("listener_token_required", mount: mount)
