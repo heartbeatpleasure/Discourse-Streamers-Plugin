@@ -106,7 +106,12 @@ module ::Streamers
         return
       end
 
-      ::Streamers::ListenerBlock.find_or_create_by!(
+      if ::Streamers::ListenerBlock.manual_blocked?(stream_user_id: current_user.id, listener_user_id: target.id)
+        render json: { errors: ["already_blocked"] }, status: 422
+        return
+      end
+
+      ::Streamers::ListenerBlock.create!(
         stream_user_id: current_user.id,
         blocked_user_id: target.id
       )
@@ -132,6 +137,19 @@ module ::Streamers
         .delete_all
 
       render_json_dump(listener_blocks: listener_blocks_payload(current_user))
+    end
+
+    # GET /streamers/me/listener_block_candidates?q=example
+    def listener_block_candidates
+      raise Discourse::InvalidAccess unless allowed_to_stream?(current_user)
+
+      term = params[:q].to_s.strip.delete_prefix("@")
+      if term.length < 2
+        render_json_dump(users: [])
+        return
+      end
+
+      render_json_dump(users: listener_block_candidate_users(term, current_user))
     end
 
     private
@@ -183,6 +201,42 @@ module ::Streamers
         "stream_user_id=#{stream_user_id.inspect} blocked_user_id=#{blocked_user_id.inspect}: " \
         "#{e.class}: #{e.message}"
       )
+    end
+
+    def listener_block_candidate_users(term, user)
+      normalized = term.to_s.strip.delete_prefix("@")
+      return [] if normalized.length < 2
+
+      escaped = ActiveRecord::Base.sanitize_sql_like(normalized.downcase)
+      blocked_ids = ::Streamers::ListenerBlock.manual_blocked_user_ids_for(user.id)
+      excluded_ids = ([user.id] + blocked_ids).map(&:to_i).select(&:positive?).uniq
+
+      scope = ::User.where.not(id: excluded_ids)
+      scope = scope.where(active: true) if ::User.column_names.include?("active")
+      scope = scope.where(staged: false) if ::User.column_names.include?("staged")
+
+      scope
+        .where(
+          "username_lower LIKE :prefix OR LOWER(COALESCE(name, '')) LIKE :contains",
+          prefix: "#{escaped}%",
+          contains: "%#{escaped}%"
+        )
+        .order(:username_lower)
+        .limit(8)
+        .map do |candidate|
+          {
+            user_id: candidate.id,
+            username: candidate.username,
+            name: candidate.name.presence,
+            avatar_template: candidate.avatar_template
+          }
+        end
+    rescue StandardError => e
+      Rails.logger.warn(
+        "[streamers] failed to search listener block candidates " \
+        "stream_user_id=#{user&.id.inspect} term=#{term.inspect}: #{e.class}: #{e.message}"
+      )
+      []
     end
 
     def listener_blocks_payload(user)

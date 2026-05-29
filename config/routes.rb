@@ -10,6 +10,7 @@ Streamers::Engine.routes.draw do
   post "/icecast/listener_remove" => "icecast_auth#listener_remove"
 
   # /streamers/me/listener_blocks
+  get "/me/listener_block_candidates" => "user_settings#listener_block_candidates"
   post "/me/listener_blocks" => "user_settings#add_listener_block"
   delete "/me/listener_blocks/:user_id" => "user_settings#remove_listener_block"
 end

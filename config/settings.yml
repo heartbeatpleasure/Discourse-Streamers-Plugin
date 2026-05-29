@@ -73,11 +73,18 @@ plugins:
 
   streamers_listener_details_visibility:
     default: "everyone"
-    type: string
+    type: enum
+    choices:
+      - everyone
+      - streamer
+      - staff
 
   streamers_listener_block_source:
     default: "custom_only"
-    type: string
+    type: enum
+    choices:
+      - custom_only
+      - custom_and_ignored
 
   streamers_staff_bypass_listener_blocks:
     default: true

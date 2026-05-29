@@ -7,7 +7,7 @@ en:
       error_loading: "There was a problem loading the live streams."
       last_updated: "Last updated %{time}"
       listen: "Listen"
-      listen_unavailable: "Unavailable"
+      listen_unavailable: "Not available"
       profile: "Profile"
       chat: "Open chat"
       listeners:
@@ -70,11 +70,18 @@ en:
       stream_tag_save_error: "We could not save your stream tag. Please try again."
       listener_blocks_title: "Blocked listeners"
       listener_blocks_help: "Users listed here cannot listen to your stream through the Discourse Listen button. If public listen URLs remain enabled, direct external links may still count as public/unknown listeners."
-      listener_blocks_add_placeholder: "Username"
+      listener_blocks_add_placeholder: "Search username"
       listener_blocks_add: "Block"
       listener_blocks_added: "Blocked listener added."
       listener_blocks_remove: "Remove"
       listener_blocks_empty: "You have not blocked any listeners."
+      listener_blocks_searching: "Searching…"
+      listener_blocks_no_matches: "No matching users found."
+      listener_blocks_select_user: "Select a user from the suggestions or type an exact username."
+      listener_blocks_error_missing_username: "Enter a username first."
+      listener_blocks_error_unknown_user: "We could not find that user."
+      listener_blocks_error_cannot_block_self: "You cannot block yourself."
+      listener_blocks_error_already_blocked: "That user is already blocked."
       listener_blocks_ignored_count:
         one: "Also blocked through ignored users: %{count} user"
         other: "Also blocked through ignored users: %{count} users"
@@ -84,7 +91,7 @@ en:
 
     hb_streamers:
       listen: "Listen"
-      listen_unavailable: "Unavailable"
+      listen_unavailable: "Not available"
       pause: "Pause"
       resume: "Resume"
       play: "Play"
