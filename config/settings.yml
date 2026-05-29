@@ -71,6 +71,10 @@ plugins:
     min: 30
     max: 1440
 
+  streamers_listener_details_visibility:
+    default: "everyone"
+    type: string
+
   streamers_force_exclude_from_streamers:
     default: ""
     type: list

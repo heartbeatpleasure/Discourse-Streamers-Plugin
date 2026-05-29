@@ -5,7 +5,8 @@ require "rack/utils"
 
 module Streamers
   class StreamsController < ::ApplicationController
-    before_action :enforce_login_requirement
+    before_action :enforce_login_requirement, except: [:listen]
+    before_action :ensure_logged_in, only: [:listen]
 
     def index
       payload = cached_streams_payload
@@ -41,6 +42,26 @@ module Streamers
       }
     end
 
+    # Compatibility endpoint. The player no longer depends on this route because Discourse's
+    # client-side router can intercept custom HTML routes in some setups. /streams.json now
+    # receives a signed direct Icecast URL whenever listener auth needs it.
+    def listen
+      mount = normalize_mount(listen_mount_param)
+      raise Discourse::InvalidAccess if mount.blank?
+
+      setting = setting_for_mount(mount)
+      raise Discourse::InvalidAccess unless setting
+
+      listen_url = signed_or_public_listen_url(setting, current_user)
+      raise Discourse::InvalidAccess if listen_url.blank?
+
+      begin
+        redirect_to listen_url, allow_other_host: true
+      rescue ArgumentError
+        redirect_to listen_url
+      end
+    end
+
     private
 
     def enforce_login_requirement
@@ -52,17 +73,70 @@ module Streamers
     def live_streams_for_response(streams)
       Array(streams).map do |stream|
         item = stream.respond_to?(:deep_dup) ? stream.deep_dup : stream.dup
-        mount = normalize_mount(item[:mount] || item["mount"])
+        mount = normalize_mount(stream_value(item, :mount))
         setting = setting_for_mount(mount)
         listen_url = setting ? signed_or_public_listen_url(setting, current_user) : ""
 
-        if item.key?("listen_url")
-          item["listen_url"] = listen_url
-        else
-          item[:listen_url] = listen_url
-        end
+        write_stream_value(item, :listen_url, listen_url)
+        apply_listener_details_visibility!(item)
 
         item
+      end
+    end
+
+    def apply_listener_details_visibility!(item)
+      stream_user_id = stream_value(item, :user_id).to_i
+      visible = listener_details_visible_for?(current_user, stream_user_id)
+
+      write_stream_value(item, :listener_details_visible, visible)
+      return item if visible
+
+      # Keep the total Icecast listener count visible, but do not expose whether listeners
+      # are known/logged-in or who they are when the viewer is not allowed to see details.
+      total_listeners = stream_value(item, :listeners).to_i
+      write_stream_value(item, :known_listener_count, 0)
+      write_stream_value(item, :known_listeners, [])
+      write_stream_value(item, :public_listener_count, total_listeners)
+
+      item
+    end
+
+    def listener_details_visible_for?(viewer, stream_user_id)
+      return false unless viewer
+
+      mode = ::SiteSetting.streamers_listener_details_visibility.to_s.strip.downcase
+
+      case mode
+      when "everyone"
+        true
+      when "streamer"
+        viewer.staff? || viewer.id.to_i == stream_user_id.to_i
+      when "staff"
+        viewer.staff?
+      else
+        # Fail closed for typos/invalid setting values.
+        viewer.staff?
+      end
+    end
+
+    def stream_value(item, key)
+      string_key = key.to_s
+      symbol_key = key.to_sym
+
+      return item[symbol_key] if item.respond_to?(:key?) && item.key?(symbol_key)
+      return item[string_key] if item.respond_to?(:key?) && item.key?(string_key)
+
+      nil
+    end
+
+    def write_stream_value(item, key, value)
+      string_key = key.to_s
+      symbol_key = key.to_sym
+
+      if item.respond_to?(:key?) && item.key?(string_key)
+        item[string_key] = value
+      else
+        item[symbol_key] = value
       end
     end
 
@@ -77,6 +151,11 @@ module Streamers
       if user && listener_tracking_configured?
         token = ::Streamers::ListenerToken.generate(user: user, mount: setting.public_mount)
         signed_url = append_query_params(direct_url, hb_token: token)
+
+        ::Rails.logger.info(
+          "[streamers] listen_url signed mount=#{setting.public_mount.inspect} " \
+          "user_id=#{user.id} listener_auth=#{::SiteSetting.streamers_icecast_listener_auth_enabled}"
+        )
 
         return signed_url
       end
@@ -106,6 +185,20 @@ module Streamers
     def listener_tracking_configured?
       ::SiteSetting.streamers_icecast_listener_auth_enabled ||
         ::SiteSetting.streamers_icecast_listener_auth_secret.to_s.present?
+    end
+
+    def listen_mount_param
+      raw = params[:mount].presence
+      raw ||= request.query_parameters["mount"].presence
+      raw ||= request.GET["mount"].presence if request.respond_to?(:GET)
+      raw ||= request.query_string.to_s[/[?&]?mount=([^&]+)/, 1]
+      raw ||= request.fullpath.to_s[/[?&]mount=([^&]+)/, 1]
+      raw ||= params[:path].to_s[/[?&]mount=([^&]+)/, 1]
+      return "" if raw.blank?
+
+      ::Rack::Utils.unescape(raw.to_s)
+    rescue StandardError
+      raw.to_s
     end
 
     def normalize_mount(mount)

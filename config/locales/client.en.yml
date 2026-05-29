@@ -15,6 +15,7 @@ en:
       listeners_title: "Listeners for %{username}"
       listeners_known: "Known listeners"
       listeners_none_known: "No logged-in listeners are known yet."
+      listeners_hidden: "Listener details are hidden for your account."
       listeners_public:
         one: "%{count} public/unknown listener"
         other: "%{count} public/unknown listeners"
