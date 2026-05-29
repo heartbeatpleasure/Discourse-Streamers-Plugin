@@ -15,11 +15,11 @@ en:
         other: "%{count} listeners"
       listeners_title: "Listening to %{username}"
       listeners_known: "Listeners"
-      listeners_none_known: "No named listeners are visible yet."
+      listeners_none_known: "No one is listening right now."
       listeners_hidden: "Listener details are hidden for your account."
       listeners_public:
-        one: "%{count} anonymous listener using a direct public stream link"
-        other: "%{count} anonymous listeners using direct public stream links"
+        one: "%{count} anonymous listener via a direct public stream link"
+        other: "%{count} anonymous listeners via direct public stream links"
       listener_sessions:
         one: "%{count} connection"
         other: "%{count} connections"
