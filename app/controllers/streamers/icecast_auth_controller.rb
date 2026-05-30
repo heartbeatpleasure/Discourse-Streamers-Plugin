@@ -2,6 +2,7 @@
 
 require "rack/utils"
 require "base64"
+require "digest"
 
 module Streamers
   class IcecastAuthController < ::ActionController::Base
@@ -120,11 +121,29 @@ module Streamers
       # tampered or wrong-mount token to a public/unknown listener, otherwise a paused
       # browser audio element can resume with an old URL and reappear as anonymous.
       if token_present && !listener_user
+        log_listener_debug!(
+          outcome: "token_invalid",
+          mount: mount,
+          client_id: listener_client_id,
+          user_id: nil,
+          token_present: true,
+          token_fingerprint: listener_token_fingerprint(token),
+          token_required: token_required
+        )
         deny!("listener_token_invalid", mount: mount)
         return
       end
 
       if token_required && !listener_user
+        log_listener_debug!(
+          outcome: "token_required",
+          mount: mount,
+          client_id: listener_client_id,
+          user_id: nil,
+          token_present: false,
+          token_fingerprint: nil,
+          token_required: token_required
+        )
         deny!("listener_token_required", mount: mount)
         return
       end
@@ -136,9 +155,29 @@ module Streamers
         )
 
         if block_reason.present?
+          log_listener_debug!(
+            outcome: "blocked",
+            mount: mount,
+            client_id: listener_client_id,
+            user_id: listener_user.id,
+            token_present: token_present,
+            token_fingerprint: listener_token_fingerprint(token),
+            token_required: token_required,
+            block_source: block_reason
+          )
           deny!("listener_blocked", mount: mount, user_id: listener_user.id, source: block_reason)
           return
         end
+
+        log_listener_debug!(
+          outcome: "known",
+          mount: mount,
+          client_id: listener_client_id,
+          user_id: listener_user.id,
+          token_present: token_present,
+          token_fingerprint: listener_token_fingerprint(token),
+          token_required: token_required
+        )
 
         begin
           ::Streamers::ListenerSession.record_add!(
@@ -154,6 +193,18 @@ module Streamers
             "client=#{listener_client_id.inspect}: #{e.class}: #{e.message}"
           )
         end
+      end
+
+      unless listener_user
+        log_listener_debug!(
+          outcome: "public",
+          mount: mount,
+          client_id: listener_client_id,
+          user_id: nil,
+          token_present: token_present,
+          token_fingerprint: listener_token_fingerprint(token),
+          token_required: token_required
+        )
       end
 
       accept!(listener_user ? "listener_known" : "listener_public")
@@ -250,6 +301,41 @@ module Streamers
 
     def listener_client_id
       (params[:client].presence || params[:client_id].presence || params[:id].presence).to_s
+    end
+
+    def log_listener_debug!(outcome:, mount:, client_id:, user_id:, token_present:, token_fingerprint:, token_required:, block_source: nil)
+      return unless SiteSetting.respond_to?(:streamers_listener_debug_logging) && SiteSetting.streamers_listener_debug_logging
+
+      details = {
+        outcome: outcome,
+        mount: mount,
+        client: client_id.to_s,
+        user_id: user_id,
+        token_present: !!token_present,
+        token_fp: token_fingerprint,
+        token_required: !!token_required,
+        block_source: block_source,
+        ip_hash: digest_for_log(request.remote_ip),
+        ua_hash: digest_for_log(request.user_agent)
+      }.compact
+
+      Rails.logger.info("[streamers] listener_debug #{details.map { |k, v| "#{k}=#{v.inspect}" }.join(" ")}")
+    rescue StandardError => e
+      Rails.logger.warn("[streamers] listener_debug failed: #{e.class}: #{e.message}")
+    end
+
+    def listener_token_fingerprint(token)
+      value = token.to_s
+      return nil if value.blank?
+
+      Digest::SHA256.hexdigest(value)[0, 16]
+    end
+
+    def digest_for_log(value)
+      v = value.to_s
+      return nil if v.blank?
+
+      Digest::SHA256.hexdigest(v)[0, 16]
     end
 
     def callback_authenticated?
