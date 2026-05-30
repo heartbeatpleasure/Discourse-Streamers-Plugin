@@ -185,7 +185,8 @@ module Streamers
             mount: mount,
             client_id: listener_client_id,
             user: listener_user,
-            request: request
+            request: request,
+            token_fingerprint: full_listener_token_fingerprint(token)
           )
         rescue => e
           Rails.logger.warn(
@@ -325,10 +326,16 @@ module Streamers
     end
 
     def listener_token_fingerprint(token)
-      value = token.to_s
-      return nil if value.blank?
+      fingerprint = full_listener_token_fingerprint(token).to_s
+      return nil if fingerprint.blank?
 
-      Digest::SHA256.hexdigest(value)[0, 16]
+      fingerprint[0, 16]
+    end
+
+    def full_listener_token_fingerprint(token)
+      ::Streamers::ListenerToken.fingerprint(token)
+    rescue StandardError
+      nil
     end
 
     def digest_for_log(value)

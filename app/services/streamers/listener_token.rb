@@ -40,6 +40,15 @@ module Streamers
       nil
     end
 
+    def self.fingerprint(token)
+      value = token.to_s
+      return nil if value.blank?
+
+      OpenSSL::HMAC.hexdigest("SHA256", signing_secret, "fingerprint:#{value}")
+    rescue StandardError
+      nil
+    end
+
     def self.ttl_seconds
       ttl = ::SiteSetting.streamers_listener_token_ttl_seconds.to_i
       ttl = 300 if ttl <= 0

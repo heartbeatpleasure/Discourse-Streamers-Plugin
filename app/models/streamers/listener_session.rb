@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "digest"
+require "set"
 
 module Streamers
   class ListenerSession < ActiveRecord::Base
@@ -11,7 +12,7 @@ module Streamers
 
     scope :active, -> { where(ended_at: nil) }
 
-    def self.record_add!(stream_user_id:, mount:, client_id:, user: nil, request: nil)
+    def self.record_add!(stream_user_id:, mount:, client_id:, user: nil, request: nil, token_fingerprint: nil)
       now = Time.zone.now
       normalized_mount = normalize_mount(mount)
       normalized_client_id = client_id.to_s.presence || "missing-#{SecureRandom.hex(12)}"
@@ -22,6 +23,7 @@ module Streamers
       session.stream_user_id = stream_user_id
       session.user_id = user&.id
       session.last_seen_at = now
+      session.token_fingerprint = normalize_token_fingerprint(token_fingerprint) if session.respond_to?(:token_fingerprint=)
       session.user_agent_hash = digest_value(request&.user_agent)
       session.ip_hash = digest_value(request&.remote_ip)
       session.save!
@@ -48,7 +50,13 @@ module Streamers
       ids = Array(stream_user_ids).map(&:to_i).select(&:positive?).uniq
       return {} if ids.blank?
 
-      grouped = Hash.new { |h, k| h[k] = { known_session_count: 0, listeners: {} } }
+      grouped = Hash.new do |h, k|
+        h[k] = {
+          known_connection_count: 0,
+          logical_session_keys: Set.new,
+          listeners: {}
+        }
+      end
 
       active.where(stream_user_id: ids).includes(:user).find_each do |session|
         summary = grouped[session.stream_user_id]
@@ -58,17 +66,20 @@ module Streamers
           listener_user: session.user
         )
 
-        summary[:known_session_count] += 1
+        summary[:known_connection_count] += 1
+        logical_key = logical_session_key(session)
+        summary[:logical_session_keys] << logical_key
+
         listener = summary[:listeners][session.user_id] ||= {
           user_id: session.user.id,
           username: session.user.username,
           name: session.user.name.presence || session.user.username,
           avatar_template: session.user.avatar_template,
-          session_count: 0,
+          logical_session_keys: Set.new,
           started_at: session.started_at
         }
 
-        listener[:session_count] += 1
+        listener[:logical_session_keys] << logical_key
         listener[:started_at] = [listener[:started_at], session.started_at].compact.min
       end
 
@@ -78,15 +89,39 @@ module Streamers
         end
 
         {
-          known_session_count: summary[:known_session_count],
+          known_connection_count: summary[:known_connection_count].to_i,
+          known_session_count: summary[:logical_session_keys].length,
           listeners: listeners.map do |listener|
-            listener.merge(
-              has_multiple_sessions: listener[:session_count].to_i > 1,
+            session_count = listener[:logical_session_keys].length
+            listener.except(:logical_session_keys).merge(
+              session_count: session_count,
+              has_multiple_sessions: session_count > 1,
               started_at: listener[:started_at]&.iso8601
             )
           end
         }
       end
+    end
+
+    def self.logical_session_key(session)
+      fingerprint = if session.respond_to?(:token_fingerprint)
+        session.token_fingerprint.to_s
+      else
+        ""
+      end
+
+      if fingerprint.present?
+        "token:#{session.user_id}:#{fingerprint}"
+      else
+        "client:#{session.id || session.client_id}:#{session.mount}:#{session.started_at&.to_i}"
+      end
+    end
+
+    def self.normalize_token_fingerprint(value)
+      s = value.to_s.strip
+      return nil if s.blank?
+
+      s[0, 128]
     end
 
     def self.normalize_mount(mount)

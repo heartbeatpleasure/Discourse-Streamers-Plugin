@@ -53,11 +53,17 @@ module Streamers
         # Note: despite the setting name (historical), this is a Discourse Chat *channel* id.
         stream_chat_topic_id = chat_topic_id_for_tag(safe_tag.presence)
 
-        listener_total = src["listeners"].to_i
-        listener_summary = listener_summaries[user.id] || { known_session_count: 0, listeners: [] }
+        icecast_listener_count = src["listeners"].to_i
+        listener_summary = listener_summaries[user.id] || {
+          known_connection_count: 0,
+          known_session_count: 0,
+          listeners: []
+        }
+        known_connection_count = listener_summary[:known_connection_count].to_i
         known_listener_count = listener_summary[:known_session_count].to_i
-        known_listeners = listener_total.positive? ? listener_summary[:listeners] : []
-        public_listener_count = [listener_total - known_listener_count, 0].max
+        public_listener_count = [icecast_listener_count - known_connection_count, 0].max
+        logical_listener_total = known_listener_count + public_listener_count
+        known_listeners = logical_listener_total.positive? ? listener_summary[:listeners] : []
 
         {
           user_id: user.id,
@@ -66,7 +72,7 @@ module Streamers
           avatar_template: user.avatar_template,
           mount: mount,
           listen_url: "",
-          listeners: listener_total,
+          listeners: logical_listener_total,
           known_listener_count: known_listener_count,
           public_listener_count: public_listener_count,
           known_listeners: known_listeners,
